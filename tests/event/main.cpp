@@ -1,0 +1,37 @@
+#include <r2/engine.h>
+using namespace r2;
+
+class test_receiver : public event_receiver {
+    public:
+        test_receiver() {}
+        virtual ~test_receiver() {}
+
+        virtual void handle(event* e) {
+            i32 i = 0;
+            printf("Test\n");
+            if(!e->data()->read_int32(i)) {
+                printf("Failed to read int from event\n");
+                return;
+            }
+            printf("event received: %s: %d\n",e->data()->name().c_str(),i);
+        }
+};
+
+int main(int argc,char** argv) {
+    r2engine* eng = new r2engine(argc,argv);
+
+    test_receiver* rec = new test_receiver();
+    eng->add_child(rec);
+
+    event* e = new evt(eng,"test_event");
+    e->data()->write_int32(4321);
+    eng->dispatch(e);
+
+    int r = eng->run();
+
+    delete e;
+    delete rec;
+    delete eng;
+
+    return r;
+}
