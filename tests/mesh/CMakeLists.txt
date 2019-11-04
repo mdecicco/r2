@@ -1,6 +1,6 @@
 project(mesh_test)
 
-add_executable(test3 main.cpp)
+add_executable(3_mesh_test main.cpp)
 
-target_include_directories(test3 PUBLIC ../../engine)
-target_link_libraries(test3 r2)
+target_include_directories(3_mesh_test PUBLIC ../../engine)
+target_link_libraries(3_mesh_test r2)

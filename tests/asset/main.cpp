@@ -33,7 +33,8 @@ class test_asset : public r2::asset {
 };
 
 int main(int argc,char** argv) {
-    r2::r2engine* eng = new r2::r2engine(argc,argv);
+	r2::r2engine::create(argc, argv);
+	r2::r2engine* eng = r2::r2engine::get();
     r2::asset_man* assets = eng->assets();
 
     // no errors here, unless it can't find the file
@@ -47,6 +48,6 @@ int main(int argc,char** argv) {
     assets->destroy(ass0);
 
     int ret = eng->run();
-    delete eng;
+	eng->shutdown();
     return ret;
 }

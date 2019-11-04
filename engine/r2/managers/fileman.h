@@ -102,6 +102,7 @@ namespace r2
             u32 position() const { return m_offset; }
             bool at_end(u32 end_off = 0) const { return m_offset > m_size - end_off; }
             void* data() { return &m_data[m_offset]; }
+			void clear();
             u32 size() const { return m_size; }
 
             string name() const { return m_name; }

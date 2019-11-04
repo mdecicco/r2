@@ -17,8 +17,8 @@ namespace r2 {
             bool load(const string& path);
             bool save(const string& path);
 
-            virtual bool deserialize(const unsigned char* data,size_t length) = 0;
-            virtual bool serialize(unsigned char** data,size_t* length) = 0;
+            virtual bool deserialize(const unsigned char* data, size_t length) = 0;
+            virtual bool serialize(unsigned char** data, size_t* length) = 0;
 
         protected:
             friend class asset_man;
@@ -27,6 +27,7 @@ namespace r2 {
 
             asset_man* m_mgr;
             string m_name;
+			string m_filename;
     };
 
     class asset_man {

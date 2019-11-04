@@ -18,7 +18,8 @@ class test_receiver : public event_receiver {
 };
 
 int main(int argc,char** argv) {
-    r2engine* eng = new r2engine(argc,argv);
+	r2::r2engine::create(argc, argv);
+	r2::r2engine* eng = r2::r2engine::get();
 
     test_receiver* rec = new test_receiver();
     eng->add_child(rec);
@@ -31,7 +32,7 @@ int main(int argc,char** argv) {
 
     delete e;
     delete rec;
-    delete eng;
+	eng->shutdown();
 
     return r;
 }

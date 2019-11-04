@@ -1,14 +1,15 @@
 #include <r2/engine.h>
 
 namespace r2 {
-    event::event(const char* file,const int line,r2engine* eng,const string& name,bool data_storage,bool recursive) {
+    event::event(const string& file, const int line, r2engine* eng, const string& name, bool data_storage, bool recursive) {
         m_caller.file = file;
         m_caller.line = line;
         m_name = name;
         m_recurse = recursive;
         m_eng = eng;
+		m_v8local = nullptr;
         if(recursive) {
-            m_data = m_eng->files()->create(DM_BINARY,"event_data");
+            m_data = m_eng->files()->create(DM_BINARY, "event_data");
         } else m_data = nullptr;
     }
     event::~event() {

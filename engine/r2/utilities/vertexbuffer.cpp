@@ -58,11 +58,11 @@ namespace r2 {
         m_format = fmt;
         m_maxCount = max_count;
         m_vertexCount = 0;
-        r2Log(m_eng,"Allocating %d bytes for a maximum of %d vertices of format [%s]",m_format.size() * max_count,max_count,m_format.to_string().c_str());
+        r2Log("Allocating %d bytes for a maximum of %d vertices of format [%s]",m_format.size() * max_count,max_count,m_format.to_string().c_str());
         m_data = new unsigned char[m_format.size() * max_count];
     }
     vertex_buffer::~vertex_buffer() {
-        r2Log(m_eng,"Deallocating vertex buffer of format [%s]: (%zu bytes / %zu bytes | %zu vertices / %zu vertices used)",m_format.to_string().c_str(),used_size(),max_size(),m_vertexCount,m_maxCount);
+        r2Log("Deallocating vertex buffer of format [%s]: (%zu bytes / %zu bytes | %zu vertices / %zu vertices used)",m_format.to_string().c_str(),used_size(),max_size(),m_vertexCount,m_maxCount);
         if(m_data) delete [] m_data;
         m_data = 0;
     }
@@ -80,7 +80,7 @@ namespace r2 {
     }
     vtx_bo_segment vertex_buffer::append(const void *data, size_t count) {
         if(count >= m_maxCount - m_vertexCount) {
-            r2Error(m_eng,"Insufficient space in vertex buffer of format [%s] for %d vertices (%d max)",m_format.to_string().c_str(),count,m_maxCount);
+            r2Error("Insufficient space in vertex buffer of format [%s] for %d vertices (%d max)",m_format.to_string().c_str(),count,m_maxCount);
             vtx_bo_segment seg;
             seg.buffer = nullptr;
             memset(&seg,0,sizeof(vtx_bo_segment));
@@ -93,7 +93,7 @@ namespace r2 {
         seg.end = seg.begin + count;
         seg.memEnd = seg.end * m_format.size();
 
-        r2Log(m_eng,"Buffering data range: %zu -> %zu (buf: 0x%X)",seg.memBegin,seg.memEnd,(intptr_t)m_data);
+        r2Log("Buffering data range: %zu -> %zu (buf: 0x%X)",seg.memBegin,seg.memEnd,(intptr_t)m_data);
         memcpy(m_data,data,seg.memEnd - seg.memBegin);
         m_vertexCount += count;
 

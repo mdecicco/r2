@@ -14,15 +14,15 @@ namespace r2 {
         public:
             typedef struct _caller {
                 _caller() {
-                    file = nullptr;
+                    file = "";
                     line = 0;
                 }
                 ~_caller() { }
-                const char* file;
+                string file;
                 int line;
             } caller;
 
-            event(const char* file,const int line,r2engine* eng,const string& name,bool data_storage = true,bool recursive = true);
+            event(const string& file, const int line, r2engine* eng, const string& name, bool data_storage = true, bool recursive = true);
             ~event();
 
             caller emitted_at() const;
@@ -30,7 +30,10 @@ namespace r2 {
             string name() const;
             data_container* data() const;
 
-            void stop_propagating();
+            void stop_propagating() { m_recurse = false; }
+
+			void set_v8_local(void* local) { m_v8local = local; }
+			void* v8_local() { return m_v8local; }
 
         protected:
             caller m_caller;
@@ -38,6 +41,7 @@ namespace r2 {
             r2engine* m_eng;
             string m_name;
             bool m_recurse;
+			void* m_v8local;
     };
 
     class event_receiver {

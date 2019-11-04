@@ -1,7 +1,8 @@
 #include <r2/engine.h>
 
-int main(int argc,char** argv) {
-    r2::r2engine* g_Engine = new r2::r2engine(argc,argv);
+int main(int argc, char** argv) {
+	r2::r2engine::create(argc, argv);
+    r2::r2engine* g_Engine = r2::r2engine::get();
     const vector<string>& args = g_Engine->args();
 
     for(unsigned int i = 0;i < args.size();i++) {
@@ -9,6 +10,7 @@ int main(int argc,char** argv) {
     }
 
     int ret = g_Engine->run();
-    delete g_Engine;
+
+	g_Engine->shutdown();
     return ret;
 }

@@ -28,7 +28,8 @@ class test_instance_data {
 typedef render_mesh<test_vertex,unsigned char,test_instance_data> instanced_mesh;
 
 int main(int argc,char** argv) {
-    r2engine* eng = new r2engine(argc,argv);
+	r2::r2engine::create(argc, argv);
+	r2::r2engine* eng = r2::r2engine::get();
     scene* scene1 = eng->scenes()->create("scene1");
 
     // define mesh characteristics
@@ -63,7 +64,7 @@ int main(int argc,char** argv) {
     mesh->append_index(3); // bottom left
 
     // a single instance at 0, 0 (I know... This is just a test)
-    mesh->append_instance(test_instance_data(0,0,1.0));
+    mesh->append_instance(test_instance_data(0, 0, 1.0));
 
     render_node* node = scene1->add_mesh(mesh);
 
@@ -71,7 +72,7 @@ int main(int argc,char** argv) {
     int r = eng->run();
 
     eng->scenes()->destroy(scene1);
-    delete eng;
+	eng->shutdown();
 
     return r;
 }

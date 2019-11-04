@@ -3,6 +3,8 @@
 #include <float.h>
 #include <stdint.h>
 
+#define _CRT_NO_VA_START_VALIDATION
+
 namespace r2 {
     typedef uintptr_t           Ptr;
 

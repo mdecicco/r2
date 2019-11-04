@@ -1,6 +1,6 @@
 project(asset_test)
 
-add_executable(test2 main.cpp)
+add_executable(1_asset_test main.cpp)
 
-target_include_directories(test2 PUBLIC ../../engine)
-target_link_libraries(test2 r2)
+target_include_directories(1_asset_test PUBLIC ../../engine)
+target_link_libraries(1_asset_test r2)

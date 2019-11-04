@@ -1,7 +1,8 @@
 #include <r2/engine.h>
 
 #ifdef _WIN32
-    #include <direct.h>
+    #include <r2/utilities/dirent.h>
+	#include <direct.h>
     #define atoll _atoi64
 #else
     #include <dirent.h>
@@ -73,7 +74,7 @@ namespace r2 {
         {
             if(fread(data,size,1,m_handle) != 1)
             {
-                r2Error(m_mgr->engine(),"Failed to read %u bytes from data container (%s): Call to fread failed",size,m_name.c_str());
+                r2Error("Failed to read %u bytes from data container (%s): Call to fread failed",size,m_name.c_str());
                 return false;
             }
             else
@@ -85,7 +86,7 @@ namespace r2 {
 
         if(at_end(size))
         {
-            r2Error(m_mgr->engine(),"Failed to read %u bytes from data container (%s): End of data encountered",size,m_name.c_str());
+            r2Error("Failed to read %u bytes from data container (%s): End of data encountered",size,m_name.c_str());
             return false;
         }
         for(u32 i = m_offset;i < size;i++) {
@@ -100,7 +101,7 @@ namespace r2 {
         {
             if(fwrite(data,size,1,m_handle) != 1)
             {
-                r2Error(m_mgr->engine(),"Failed to write %u bytes to data container (%s): Call to fwrite failed",size,m_name.c_str());
+                r2Error("Failed to write %u bytes to data container (%s): Call to fwrite failed",size,m_name.c_str());
                 return false;
             }
             else
@@ -134,24 +135,24 @@ namespace r2 {
 
     #define ParseInteger(Type,Min,Max,MinFmt,MaxFmt) \
     char c = 0; \
-    if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse integer from data container (%s)",m_name.c_str()); return false; } \
-    while(IsWhitespace(c)) { if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse integer from data container (%s)",m_name.c_str()); return false; } } \
+    if(!read(c)) { r2Error("Failed to parse integer from data container (%s)",m_name.c_str()); return false; } \
+    while(IsWhitespace(c)) { if(!read(c)) { r2Error("Failed to parse integer from data container (%s)",m_name.c_str()); return false; } } \
     bool IsNeg = c == '-'; \
     if(IsNeg) \
     { \
-        if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse integer from data container (%s)",m_name.c_str()); return false; } \
+        if(!read(c)) { r2Error("Failed to parse integer from data container (%s)",m_name.c_str()); return false; } \
     } \
     string s; \
     while(IsNumber(c)) \
     { \
         s += c; \
-        if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse integer from data container (%s)",m_name.c_str()); return false; } \
+        if(!read(c)) { r2Error("Failed to parse integer from data container (%s)",m_name.c_str()); return false; } \
     } \
     long long i = atoll(s.c_str()); \
     if(i > Max) \
     { \
-        r2Warn(m_mgr->engine(),"Parsing integer from data container (%s) that will not fit in data type ("#Type")",m_name.c_str()); \
-        r2Log(m_mgr->engine(),"Info: Parsed value: %lli | Min/Max value for data type: "#MinFmt"/"#MaxFmt,i,Min,Max); \
+        r2Warn("Parsing integer from data container (%s) that will not fit in data type ("#Type")",m_name.c_str()); \
+        r2Log("Info: Parsed value: %lli | Min/Max value for data type: "#MinFmt"/"#MaxFmt,i,Min,Max); \
     } \
     if(IsNeg) data = -i; \
     else data = i;
@@ -216,16 +217,16 @@ namespace r2 {
         else
         {
             char c = 0;
-            if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse float32 from data container (%s)",m_name.c_str()); return false; }
+            if(!read(c)) { r2Error("Failed to parse float32 from data container (%s)",m_name.c_str()); return false; }
 
             //Skip whitespace
-            while(IsWhitespace(c)) { if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse float32 from data container (%s)",m_name.c_str()); return false; } }
+            while(IsWhitespace(c)) { if(!read(c)) { r2Error("Failed to parse float32 from data container (%s)",m_name.c_str()); return false; } }
 
             //Skip '-' if negative
             bool IsNeg = c == '-';
             if(IsNeg)
             {
-                if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse float32 from data container (%s)",m_name.c_str()); return false; }
+                if(!read(c)) { r2Error("Failed to parse float32 from data container (%s)",m_name.c_str()); return false; }
             }
 
             //Parse value
@@ -235,21 +236,21 @@ namespace r2 {
             {
                 if(c == '.') DecimalEncountered = true;
                 s += c;
-                if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse float32 from data container (%s)",m_name.c_str()); return false; }
+                if(!read(c)) { r2Error("Failed to parse float32 from data container (%s)",m_name.c_str()); return false; }
             }
 
             f64 f = atof(s.c_str());
             if(f > FLT_MAX)
             {
-                r2Warn(m_mgr->engine(),"Parsing real number from data container (%s) that will not fit in data type (f32)",m_name.c_str());
-                r2Log(m_mgr->engine(),"Info: Parsed value: %f | Min/Max value for data type: %f,%f",f,FLT_MIN,FLT_MAX);
+                r2Warn("Parsing real number from data container (%s) that will not fit in data type (f32)",m_name.c_str());
+                r2Log("Info: Parsed value: %f | Min/Max value for data type: %f,%f",f,FLT_MIN,FLT_MAX);
             }
             u32 Digits = s.length();
             if(DecimalEncountered) Digits--;
             if(Digits > 7)
             {
-                r2Warn(m_mgr->engine(),"Parsing real number from data container (%s) into data type (f32) that may lose precision (more than 7 digits)",m_name.c_str());
-                r2Log(m_mgr->engine(),"Info: Actual value: %s | float value: %f",s.c_str(),(f32)f);
+                r2Warn("Parsing real number from data container (%s) into data type (f32) that may lose precision (more than 7 digits)",m_name.c_str());
+                r2Log("Info: Actual value: %s | float value: %f",s.c_str(),(f32)f);
             }
 
             if(IsNeg) data = -f;
@@ -263,16 +264,16 @@ namespace r2 {
         else
         {
             char c = 0;
-            if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse float64 from data container (%s)",m_name.c_str()); return false; }
+            if(!read(c)) { r2Error("Failed to parse float64 from data container (%s)",m_name.c_str()); return false; }
 
             //Skip whitespace
-            while(IsWhitespace(c)) { if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse float64 from data container (%s)",m_name.c_str()); return false; } }
+            while(IsWhitespace(c)) { if(!read(c)) { r2Error("Failed to parse float64 from data container (%s)",m_name.c_str()); return false; } }
 
             //Skip '-' if negative
             bool IsNeg = c == '-';
             if(IsNeg)
             {
-                if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse float64 from data container (%s)",m_name.c_str()); return false; }
+                if(!read(c)) { r2Error("Failed to parse float64 from data container (%s)",m_name.c_str()); return false; }
             }
 
             //Parse value
@@ -282,21 +283,21 @@ namespace r2 {
             {
                 if(c == '.') DecimalEncountered = true;
                 s += c;
-                if(!read(c)) { r2Error(m_mgr->engine(),"Failed to parse float64 from data container (%s)",m_name.c_str()); return false; }
+                if(!read(c)) { r2Error("Failed to parse float64 from data container (%s)",m_name.c_str()); return false; }
             }
 
             f64 f = atof(s.c_str());
             if(f > DBL_MAX)
             {
-                r2Warn(m_mgr->engine(),"Parsing real number from data container (%s) that will not fit in data type (f64)",m_name.c_str());
-                r2Log(m_mgr->engine(),"Info: Parsed value: %f | Min/Max value for data type: %f,%f",f,DBL_MIN,DBL_MAX);
+                r2Warn("Parsing real number from data container (%s) that will not fit in data type (f64)",m_name.c_str());
+                r2Log("Info: Parsed value: %f | Min/Max value for data type: %f,%f",f,DBL_MIN,DBL_MAX);
             }
             u32 Digits = s.length();
             if(DecimalEncountered) Digits--;
             if(Digits > 7)
             {
-                r2Warn(m_mgr->engine(),"Parsing real number from data container (%s) into data type (f64) that may lose precision (more than 16 digits)",m_name.c_str());
-                r2Log(m_mgr->engine(),"Info: Actual value: %s | float64 value: %f",s.c_str(),(f64)f);
+                r2Warn("Parsing real number from data container (%s) into data type (f64) that may lose precision (more than 16 digits)",m_name.c_str());
+                r2Log("Info: Actual value: %s | float64 value: %f",s.c_str(),(f64)f);
             }
 
             if(IsNeg) data = -f;
@@ -327,7 +328,7 @@ namespace r2 {
     i32 r = _snprintf(Out,MaxStrLen,#fmt,data); \
     if(r < 0) \
     { \
-        r2Error(m_mgr->engine(),"Failed to convert integer (" #Type ") to string for data container (%s): call to snprintf returned %d",m_name.c_str(),r); \
+        r2Error("Failed to convert integer (" #Type ") to string for data container (%s): call to snprintf returned %d",m_name.c_str(),r); \
         return false; \
     } \
     else return write_data(Out,r);
@@ -395,7 +396,7 @@ namespace r2 {
             i32 r = _snprintf(Out,32,"%f",data);
             if(r < 0)
             {
-                r2Error(m_mgr->engine(),"Failed to convert real number (f32) to string for data container (%s): call to snprintf returned %d",m_name.c_str(),r);
+                r2Error("Failed to convert real number (f32) to string for data container (%s): call to snprintf returned %d",m_name.c_str(),r);
                 return false;
             }
             else return write_data(Out,r);
@@ -411,7 +412,7 @@ namespace r2 {
             i32 r = _snprintf(Out,32,"%f",data);
             if(r < 0)
             {
-                r2Error(m_mgr->engine(),"Failed to convert real number (f64) to string for data container (%s): call to snprintf returned %d",m_name.c_str(),r);
+                r2Error("Failed to convert real number (f64) to string for data container (%s): call to snprintf returned %d",m_name.c_str(),r);
                 return false;
             }
             else return write_data(Out,r);
@@ -423,12 +424,12 @@ namespace r2 {
     {
         if(m_offset + Offset > m_size)
         {
-            r2Error(m_mgr->engine(),"Call to seek(%u) with data container (%s) failed: End of data would be exceeded",Offset,m_name.c_str());
+            r2Error("Call to seek(%u) with data container (%s) failed: End of data would be exceeded",Offset,m_name.c_str());
             return;
         }
         if(((i32)m_offset + (i32)Offset) < 0)
         {
-            r2Error(m_mgr->engine(),"Call to seek(%u) with data container (%s) failed: Resulting data position less than 0",Offset,m_name.c_str());
+            r2Error("Call to seek(%u) with data container (%s) failed: Resulting data position less than 0",Offset,m_name.c_str());
             return;
         }
 
@@ -437,7 +438,7 @@ namespace r2 {
             i32 r = fseek(m_handle,Offset,SEEK_CUR);
             if(r != 0)
             {
-                r2Error(m_mgr->engine(),"Call to seek(%d) with data container (%s) failed: Call to fseek returned (%d)",Offset,m_name.c_str(),r);
+                r2Error("Call to seek(%d) with data container (%s) failed: Call to fseek returned (%d)",Offset,m_name.c_str(),r);
             }
             else m_offset += Offset;
         }
@@ -446,7 +447,7 @@ namespace r2 {
     {
         if(Offset > m_size)
         {
-            r2Error(m_mgr->engine(),"Call to set_position(%u) with data container (%s) failed: New position exceeds end of data",Offset,m_name.c_str());
+            r2Error("Call to set_position(%u) with data container (%s) failed: New position exceeds end of data",Offset,m_name.c_str());
             return;
         }
 
@@ -455,18 +456,23 @@ namespace r2 {
             i32 r = fseek(m_handle,Offset,SEEK_SET);
             if(r != 0)
             {
-                r2Error(m_mgr->engine(),"Call to seek(%d) with data container (%s) failed: Call to fseek returned (%d)",Offset,m_name.c_str(),r);
+                r2Error("Call to seek(%d) with data container (%s) failed: Call to fseek returned (%d)",Offset,m_name.c_str(),r);
             }
             else m_offset = Offset;
         }
         else m_offset = Offset;
     }
+	void data_container::clear() {
+		if (m_data.size() > 0) m_data.clear();
+		m_offset = 0;
+		m_size = 0;
+	}
     file_man::~file_man() {
         if(m_containers.size() != 0) {
-            r2Warn(m_eng,"file_man has %lu unreleased data containers at shutdown time",m_containers.size());
+            r2Warn("File manager has %lu unreleased data containers at shutdown time",m_containers.size());
 
             for(auto c = m_containers.begin();c != m_containers.end();c++) {
-                r2Log(m_eng,"Destroying unreleased container: %s",(*c)->m_name.c_str());
+				r2Warn("Destroying unreleased container: %s",(*c)->m_name.c_str());
                 delete *c;
             }
         }
@@ -492,7 +498,7 @@ namespace r2 {
         #endif
         if(!fp)
         {
-            r2Error(m_eng,"Failed to open file (%s)",File.c_str());
+            r2Error("Failed to open file (%s)",File.c_str());
             return 0;
         }
 
@@ -512,7 +518,7 @@ namespace r2 {
         #endif
         if(!fp)
         {
-            r2Error(m_eng,"Failed to open file (%s)",File.c_str());
+            r2Error("Failed to open file (%s)",File.c_str());
             return 0;
         }
 
@@ -523,7 +529,7 @@ namespace r2 {
         if(Sz == 0)
         {
             fclose(fp);
-            r2Warn(m_eng,"Loading empty file (%s) into data container (%s)",File.c_str(),Name.length() == 0 ? File.c_str() : Name.c_str());
+            r2Warn("Loading empty file (%s) into data container (%s)",File.c_str(),Name.length() == 0 ? File.c_str() : Name.c_str());
 
             data_container* c = new data_container(this,0,Name.length() == 0 ? File : Name,Mode);
             c->m_iterator = m_containers.insert(m_containers.end(),c);
@@ -534,7 +540,7 @@ namespace r2 {
             u8* data = new u8[Sz];
             if(fread(data,Sz,1,fp) != 1)
             {
-                r2Error(m_eng,"Failed to load %u bytes from file (%s) into memory",Sz,File.c_str());
+                r2Error("Failed to load %u bytes from file (%s) into memory",Sz,File.c_str());
                 fclose(fp);
                 return 0;
             }
@@ -557,13 +563,13 @@ namespace r2 {
         #endif
         if(!fp)
         {
-            r2Error(m_eng,"Failed to open file (%s)",File.c_str());
+            r2Error("Failed to open file (%s)",File.c_str());
             return false;
         }
 
         if(fwrite(&data->m_data[0],data->m_size,1,fp) != 1)
         {
-            r2Error(m_eng,"Failed to write %u bytes from data container (%s) to file (%s)",data->m_size,data->m_name.c_str(),File.c_str());
+            r2Error("Failed to write %u bytes from data container (%s) to file (%s)",data->m_size,data->m_name.c_str(),File.c_str());
             fclose(fp);
             return false;
         }
@@ -585,7 +591,7 @@ namespace r2 {
     void file_man::set_working_directory(const string& dir)
     {
         if(!exists(dir)) {
-            r2Error(m_eng,"Unable to set current working directory (%s): Directory does not exist",dir.c_str());
+            r2Error("Unable to set current working directory (%s): Directory does not exist",dir.c_str());
             return;
         }
 
@@ -593,7 +599,7 @@ namespace r2 {
     }
     directory_info* file_man::parse_directory(const string& dir) {
         if(!exists(dir)) {
-            r2Error(m_eng,"Unable to parse directory (%s): Directory does not exist",dir.c_str());
+            r2Error("Unable to parse directory (%s): Directory does not exist",dir.c_str());
             return 0;
         }
 

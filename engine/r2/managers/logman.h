@@ -8,9 +8,12 @@
 using namespace std;
 
 #ifdef r2_debug
-#define r2Log(engine,...) engine->log("LOG: ",__VA_ARGS__)
-#define r2Warn(engine,...) engine->log("WARNING: ",__VA_ARGS__)
-#define r2Error(engine,...) engine->log("ERROR: ",__VA_ARGS__)
+	#include <rlutilh.h>
+	#define r2Log(...) { rlutil::setColor(rlutil::GREY); r2::r2engine::get()->log("", __VA_ARGS__); rlutil::setColor(rlutil::WHITE); }
+
+	#define r2Warn(...) { rlutil::setColor(rlutil::YELLOW); r2::r2engine::get()->log("WARNING: ", __VA_ARGS__); rlutil::setColor(rlutil::WHITE); }
+
+	#define r2Error(...) { rlutil::setColor(rlutil::LIGHTRED); r2::r2engine::get()->log("ERROR: ", __VA_ARGS__); rlutil::setColor(rlutil::WHITE); }
 #endif
 
 namespace r2 {
@@ -22,9 +25,6 @@ namespace r2 {
 
           void log(const string& pre,const string& msg,...);
           void log(const string& pre,const string& msg,va_list ap);
-        protected:
-          size_t m_bufSz;
-          char* m_buf;
     };
 }
 
