@@ -35,14 +35,13 @@ namespace r2 {
 
 	class script_env {
 		public:
-			script_env(r2engine* eng);
+			script_env();
 			~script_env();
 
 			v8pp::context* context();
 			v8::HandleScope* scope() { return &m_scope; }
 
 		protected:
-			r2engine* m_eng;
 			v8::HandleScope m_scope;
 	};
 
@@ -52,6 +51,7 @@ namespace r2 {
 			~script_man();
 
 			void execute(const string& script);
+			void executeFile(const string& file);
 
 			v8pp::context* context() { return &m_context; }
 

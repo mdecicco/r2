@@ -1,19 +1,27 @@
 #include <r2/engine.h>
 
 namespace r2 {
-    event::event(const string& file, const int line, r2engine* eng, const string& name, bool data_storage, bool recursive) {
+    event::event(const string& file, const int line, const string& name, bool has_data, bool recursive) {
         m_caller.file = file;
         m_caller.line = line;
         m_name = name;
         m_recurse = recursive;
-        m_eng = eng;
 		m_v8local = nullptr;
-        if(recursive) {
-            m_data = m_eng->files()->create(DM_BINARY, "event_data");
-        } else m_data = nullptr;
+        if(has_data) m_data = r2engine::get()->files()->create(DM_BINARY, "event_data");
+        else m_data = nullptr;
     }
+	event::event(v8Args args) : m_scriptData(args.Length() >= 2 ? var(args.GetIsolate(), args[1]) : var(args.GetIsolate(), "{}")) {
+		m_recurse = true;
+		auto isolate = args.GetIsolate();
+		trace t(isolate);
+		m_name = var(isolate, args[0]);
+		m_caller.file = t.file;
+		m_caller.line = t.line;
+		m_data = nullptr;
+		if (args.Length() == 3) m_recurse = var(isolate, args[2]);
+	}
     event::~event() {
-        if(m_data) m_eng->files()->destroy(m_data);
+        if(m_data) r2engine::get()->files()->destroy(m_data);
         m_data = nullptr;
     }
 
@@ -29,6 +37,16 @@ namespace r2 {
     data_container* event::data() const {
         return m_data;
     }
+	void event::set_script_data_from_cpp(const var& v) {
+		m_scriptData = v;
+	}
+	void event::set_script_data(v8Args args) {
+		if (args.Length() != 1) args.GetIsolate()->ThrowException(v8::String::NewFromUtf8(args.GetIsolate(), "Incorrect number of arguments provided to event::set_script_data"));
+		else m_scriptData = var(args.GetIsolate(), args[0]);
+	}
+	v8::Local<v8::Value> event::get_script_data() const {
+		return m_scriptData.value;
+	}
 
     event_receiver::event_receiver() {
     }

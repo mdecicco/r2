@@ -10,6 +10,7 @@ using namespace std;
 #include <r2/managers/assetman.h>
 #include <r2/managers/fileman.h>
 #include <r2/managers/scriptman.h>
+#include <r2/managers/renderman.h>
 
 #include <r2/utilities/event.h>
 #include <r2/utilities/window.h>
@@ -26,7 +27,9 @@ namespace r2 {
           state_man* states() const;
           asset_man* assets() const;
           file_man* files() const;
+		  render_man* renderer() const;
 		  script_man* scripts() const;
+		  log_man* logs() const;
 		  r2::window* window();
 
 		  // functions for scripts
@@ -46,13 +49,14 @@ namespace r2 {
 		  r2engine(int argc, char** argv);
 		  ~r2engine();
 		  static r2engine* instance;
+		  static log_man m_logger;
 
           // managers
-          log_man m_logger;
           scene_man* m_sceneMgr;
           state_man* m_stateMgr;
           asset_man* m_assetMgr;
           file_man* m_fileMgr;
+		  render_man* m_renderMgr;
 		  script_man* m_scriptMgr;
 
 		  // stuff

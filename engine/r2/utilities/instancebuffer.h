@@ -1,6 +1,4 @@
-#ifndef INSTANCE_BUFFER
-#define INSTANCE_BUFFER
-
+#pragma once
 
 #include <vector>
 #include <string>
@@ -12,7 +10,7 @@ namespace r2 {
     class r2engine;
 
     enum instance_attribute_type {
-        iat_int,
+        iat_int = 0,
         iat_float,
         iat_byte,
         iat_vec2i,
@@ -43,40 +41,39 @@ namespace r2 {
 
             void add_attr(instance_attribute_type type);
             bool operator==(const instance_format& rhs) const;
+			const vector<instance_attribute_type>& attributes() const;
 
             size_t size() const;
+			size_t offsetOf(u16 attrIdx) const;
             string to_string() const;
+			string hash_name() const;
 
         protected:
             vector<instance_attribute_type> m_attrs;
             size_t m_instanceSize;
             string m_fmtString;
+			string m_hashName;
     };
 
     class instance_buffer;
-    struct ins_bo_segment : public mesh_buffer_segment {
+    struct ins_bo_segment : public gpu_buffer_segment {
         instance_buffer* buffer;
     };
 
-    class instance_buffer : public mesh_buffer {
+    class instance_buffer : public gpu_buffer {
         public:
-            instance_buffer(r2engine* e,const instance_format& fmt,size_t max_count);
+            instance_buffer(const instance_format& fmt, size_t max_count);
             ~instance_buffer();
 
-            instance_format format() const;
-            size_t used_size() const;
-            size_t unused_size() const;
-            size_t max_size() const;
+            const instance_format& format() const;
+			virtual void* data() const;
 
-            ins_bo_segment append(const void* data,size_t count);
+            ins_bo_segment append(const void* data, size_t count);
 
         protected:
-            r2engine* m_eng;
             instance_format m_format;
             size_t m_instanceCount;
             size_t m_maxCount;
             unsigned char* m_data;
     };
 }
-
-#endif /* end of include guard: INSTANCE_BUFFER */

@@ -1,6 +1,10 @@
 project(scene_man_test)
 
-add_executable(2_scene_test main.cpp)
+file(GLOB_RECURSE 4_scene_man_test_src "*.h" "*.cpp")
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+add_executable(4_scene_man_test ${4_scene_man_test_src})
+ 
+SOURCE_GROUP("" FILES ${4_scene_man_test_src})
 
-target_include_directories(2_scene_test PUBLIC ../../engine)
-target_link_libraries(2_scene_test r2)
+target_include_directories(4_scene_man_test PUBLIC ../../engine)
+target_link_libraries(4_scene_man_test r2)

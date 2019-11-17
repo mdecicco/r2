@@ -9,10 +9,15 @@ class TestState {
 
 	becameActive () {
 		engine.log("TestState becameActive");
+		engine.activate_state("OtherTestState");
 	}
 
 	willBecomeInactive () {
 		engine.log("TestState willBecomeInactive");
+	}
+	
+	becameInactive () {
+		engine.log("TestState becameInactive");
 	}
 
 	willBeDestroyed () {

@@ -5,7 +5,8 @@
 
 namespace r2 {
 	script_man::script_man(r2engine* eng) : m_engine(eng), m_global_scope(m_context.isolate()) {
-		bind_engine(eng, &m_context);
+		m_context.set_lib_path("./resources");
+		bind_engine(&m_context);
 	}
 
 	script_man::~script_man() {
@@ -34,12 +35,36 @@ namespace r2 {
 		}
 	}
 
-	script_env::script_env(r2engine* eng) : m_eng(eng), m_scope(context()->isolate()) {
+	void script_man::executeFile(const string& file) {
+		auto f = r2engine::get()->files()->open(file, DM_TEXT, file);
+		if (!f) {
+			r2Error("Failed to open script \"%s\"\n", file.c_str());
+			return;
+		}
+		string source;
+		source.resize(f->size());
+		f->read_data(&source[0], f->size());
+		r2engine::get()->files()->destroy(f);
+
+		auto isolate = m_context.isolate();
+		v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+		v8::ScriptOrigin origin(v8pp::convert<string>::to_v8(isolate, file));
+		v8::Local<v8::Script> script;
+		bool is_valid = v8::Script::Compile(context, v8pp::convert<string>::to_v8(isolate, source), &origin).ToLocal(&script);
+
+		if (!is_valid) return;
+
+		if (!script.IsEmpty()) script->Run(context);
+		else r2Error("Script \"%s\" is empty", file.c_str());
+	}
+
+	script_env::script_env() : m_scope(context()->isolate()) {
 	}
 	script_env::~script_env() {
 	}
 	v8pp::context* script_env::context() {
-		return m_eng->scripts()->context();
+		return r2engine::get()->scripts()->context();
 	}
 
 	script::script(state* parentState) : m_state(parentState), m_is_valid(false) {
@@ -51,7 +76,7 @@ namespace r2 {
 	bool script::deserialize(const unsigned char* data, size_t length) {
 		string source = string((const char*)data, length);
 
-		auto ctx = m_state->environment()->context();
+		auto ctx = r2engine::get()->scripts()->context();
 		
 		v8::ScriptOrigin origin(v8pp::to_v8(ctx->isolate(), m_filename));
 		v8::Local<v8::Context> context = ctx->isolate()->GetCurrentContext();
@@ -67,7 +92,7 @@ namespace r2 {
 	void script::execute(bool logResult) {
 		try {
 			if (!m_script.IsEmpty()) {
-				auto ctx = m_state->environment()->context();
+				auto ctx = r2engine::get()->scripts()->context();
 				auto isolate = ctx->isolate();
 				v8::Local<v8::Context> v8context = isolate->GetCurrentContext();
 				v8::TryCatch exc(isolate);

@@ -1,5 +1,4 @@
-#ifndef VERTEX_BUFFER
-#define VERTEX_BUFFER
+#pragma once
 
 #include <vector>
 #include <string>
@@ -11,7 +10,7 @@ namespace r2 {
     class r2engine;
 
     enum vertex_attribute_type {
-        vvat_int,
+        vat_int = 0,
         vat_float,
         vat_byte,
         vat_vec2i,
@@ -42,40 +41,39 @@ namespace r2 {
 
             void add_attr(vertex_attribute_type type);
             bool operator==(const vertex_format& rhs) const;
+			const vector<vertex_attribute_type>& attributes() const;
 
             size_t size() const;
+			size_t offsetOf(u16 attrIdx) const;
             string to_string() const;
+			string hash_name() const;
 
         protected:
             vector<vertex_attribute_type> m_attrs;
             size_t m_vertexSize;
             string m_fmtString;
+			string m_hashName;
     };
 
     class vertex_buffer;
-    struct vtx_bo_segment : public mesh_buffer_segment{
+    struct vtx_bo_segment : public gpu_buffer_segment{
         vertex_buffer* buffer;
     };
 
-    class vertex_buffer : public mesh_buffer {
+    class vertex_buffer : public gpu_buffer {
         public:
-            vertex_buffer(r2engine* e,const vertex_format& fmt,size_t max_count);
+            vertex_buffer(const vertex_format& fmt, size_t max_count);
             ~vertex_buffer();
 
-            vertex_format format() const;
-            size_t used_size() const;
-            size_t unused_size() const;
-            size_t max_size() const;
+            const vertex_format& format() const;
+			virtual void* data() const;
 
-            vtx_bo_segment append(const void* data,size_t count);
+            vtx_bo_segment append(const void* data, size_t count);
 
         protected:
-            r2engine* m_eng;
             vertex_format m_format;
             size_t m_vertexCount;
             size_t m_maxCount;
             unsigned char* m_data;
     };
 }
-
-#endif /* end of include guard: VERTEX_BUFFER */

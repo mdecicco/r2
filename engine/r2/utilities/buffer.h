@@ -1,10 +1,13 @@
-#ifndef BUFFER_BASE
-#define BUFFER_BASE
-
+#pragma once
+#include <list>
+#include <vector>
 #include <stddef.h>
 
 namespace r2 {
-    struct mesh_buffer_segment {
+    struct gpu_buffer_segment {
+		gpu_buffer_segment() : begin(0), end(0), memBegin(0), memEnd(0) { }
+		~gpu_buffer_segment() { }
+
         size_t begin;
         size_t end;
         size_t memBegin;
@@ -12,18 +15,59 @@ namespace r2 {
 
         size_t size() const { return end - begin; }
         size_t memsize() const { return memEnd - memBegin; }
-        bool is_valid() const { return size() != 0; }
+        bool is_valid() const { return memsize() != 0; }
     };
     
-    class mesh_buffer {
+    class gpu_buffer {
         public:
-            mesh_buffer();
-            virtual ~mesh_buffer();
+			typedef struct { size_t begin, end; } changed_buffer_segment;
+
+			gpu_buffer(size_t max_size);
+            virtual ~gpu_buffer();
+
+			virtual void* data() const = 0;
 
             size_t id() const;
-        protected:
-            size_t m_id;
-    };
-}
 
-#endif /* end of include guard: BUFFER_BASE */
+			bool has_updates() const;
+			const std::list<changed_buffer_segment>& updates() const;
+			void clear_updates();
+
+			size_t used_size() const;
+			size_t unused_size() const;
+			size_t max_size() const;
+
+        protected:
+			void appended(size_t begin, size_t end);
+			void updated(size_t begin, size_t end);
+            size_t m_id;
+			size_t m_size;
+			size_t m_used;
+			std::list<changed_buffer_segment> m_updates;
+    };
+
+	class render_driver;
+
+	class buffer_pool {
+		public:
+			buffer_pool();
+			~buffer_pool();
+
+			void sync_buffers(render_driver* driver);
+
+			template<typename T, typename ... construction_args>
+			T* find_buffer(size_t bytesNeeded, construction_args ... args) {
+				for (auto buf : m_buffers) {
+					if (buf->unused_size() >= bytesNeeded) return (T*)buf;
+				}
+
+				// no buffer available with enough size
+				T* buf = new T(args...);
+				m_buffers.push_back(buf);
+				return (T*)buf;
+			}
+
+		protected:
+			std::vector<gpu_buffer*> m_buffers;
+	}; 
+}

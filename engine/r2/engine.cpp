@@ -3,12 +3,13 @@
 
 namespace r2 {
 	r2engine* r2engine::instance = 0;
+	log_man r2engine::m_logger = log_man();
 	void r2engine::create(int argc, char** argv) {
 		if (instance) return;
 		instance = new r2engine(argc, argv);
 	}
 
-    r2engine::r2engine(int argc,char** argv) : m_platform(v8::platform::NewDefaultPlatform()){
+    r2engine::r2engine(int argc,char** argv) : m_platform(v8::platform::NewDefaultPlatform()) {
         for(int i = 0;i < argc;i++) m_args.push_back(string(argv[i]));
 
 		string flags = "--expose_gc";
@@ -21,6 +22,7 @@ namespace r2 {
         m_stateMgr = new state_man(this);
         m_assetMgr = new asset_man(this);
         m_fileMgr = new file_man(this);
+		m_renderMgr = new render_man();
 		m_scriptMgr = new script_man(this);
 
 		string currentDir = argv[0];
@@ -34,11 +36,12 @@ namespace r2 {
     r2engine::~r2engine() {
 		m_scriptMgr->context()->isolate()->RequestGarbageCollectionForTesting(v8::Isolate::kFullGarbageCollection);
 
-		delete m_scriptMgr;
-        delete m_fileMgr;
-        delete m_assetMgr;
-        delete m_stateMgr;
-        delete m_sceneMgr;
+		delete m_scriptMgr; m_scriptMgr = 0;
+		delete m_renderMgr; m_renderMgr = 0;
+        delete m_fileMgr; m_fileMgr = 0;
+        delete m_assetMgr; m_assetMgr = 0;
+        delete m_stateMgr; m_stateMgr = 0;
+        delete m_sceneMgr; m_sceneMgr = 0;
 
 		v8::V8::Dispose();
 		v8::V8::ShutdownPlatform();
@@ -62,18 +65,22 @@ namespace r2 {
     asset_man* r2engine::assets() const {
         return m_assetMgr;
     }
-    file_man* r2engine::files() const {
-        return m_fileMgr;
-    }
+	file_man* r2engine::files() const {
+		return m_fileMgr;
+	}
+	render_man* r2engine::renderer() const {
+		return m_renderMgr;
+	}
 	script_man* r2engine::scripts() const {
 		return m_scriptMgr;
 	}
+	log_man* r2engine::logs() const { return const_cast<log_man*>(&m_logger); }
 	r2::window* r2engine::window() {
 		return &m_window;
 	}
 
 	bool r2engine::open_window(i32 w, i32 h, const string& title, bool can_resize, bool fullscreen) {
-		if(!m_window.create(w, h, title, can_resize, 3, 2, fullscreen)) {
+		if(!m_window.create(w, h, title, can_resize, 4, 5, fullscreen)) {
 			r2Error("Failed to open window \"%s\"", title.c_str());
 			return false;
 		}
@@ -85,19 +92,27 @@ namespace r2 {
     }
 
     int r2engine::run() {
-		f64 last_time = m_window.elapsed();
+		timer frameTimer; frameTimer.start();
+		f32 last_time = 0.0f;
 		bool open = true;
 		while(!m_window.get_close_requested()) {
 			m_window.poll();
+			vec2i sz = m_window.get_size();
+			glViewport(0, 0, sz.x, sz.y);
 			glClearColor(0, 0, 0, 0);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-			f64 time_now = m_window.elapsed();
-			f64 dt = time_now - last_time;
+			f32 time_now = frameTimer;
+			f32 dt = time_now - last_time;
 			last_time = time_now;
 
 			state* currentState = m_stateMgr->current();
-			if (currentState) currentState->update(dt);
+			if (currentState) {
+				currentState->update();
+			}
+
+			scene* test = m_sceneMgr->get("scene1");
+			test->render();
 
 			ImGui_ImplGlfwGL3_NewFrame();
 			if (currentState) currentState->render();

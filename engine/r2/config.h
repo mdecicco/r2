@@ -2,6 +2,9 @@
 #include <limits.h>
 #include <float.h>
 #include <stdint.h>
+#include <chrono>
+#include <glm/glm.hpp>
+
 
 #define _CRT_NO_VA_START_VALIDATION
 
@@ -33,6 +36,28 @@ namespace r2 {
     typedef char*               CString;
     typedef f32                 Scalar;
     typedef bool                Flag;
+
+	typedef glm::vec<2, i32>	vec2i;
+	typedef glm::vec<2, u32>	vec2ui;
+	typedef glm::vec<2, f32>	vec2f;
+	typedef glm::vec<3, i32>	vec3i;
+	typedef glm::vec<3, u32>	vec3ui;
+	typedef glm::vec<3, f32>	vec3f;
+	typedef glm::vec<4, i32>	vec4i;
+	typedef glm::vec<4, u32>	vec4ui;
+	typedef glm::vec<4, f32>	vec4f;
+	typedef glm::mat<2, 2, i32> mat2i;
+	typedef glm::mat<2, 2, u32> mat2ui;
+	typedef glm::mat<2, 2, f32> mat2f;
+	typedef glm::mat<3, 3, i32> mat3i;
+	typedef glm::mat<3, 3, u32> mat3ui;
+	typedef glm::mat<3, 3, f32> mat3f;
+	typedef glm::mat<4, 4, i32> mat4i;
+	typedef glm::mat<4, 4, u32> mat4ui;
+	typedef glm::mat<4, 4, f32> mat4f;
+
+	typedef std::chrono::high_resolution_clock tmr;
+	typedef std::chrono::duration<f32> dur;
 
     #ifdef _USE_32BIT_TIME_
     typedef f32                 Time;

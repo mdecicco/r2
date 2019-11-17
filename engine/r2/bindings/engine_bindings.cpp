@@ -1,12 +1,14 @@
 #include <r2/bindings/bindings.h>
 #include <r2/engine.h>
+#include <v8pp/class.hpp>
+#include <v8pp/json.hpp>
+#include <v8pp/convert.hpp>
 
 using namespace v8;
 using namespace v8pp;
 
-#define v8str(str) v8::String::NewFromUtf8(isolate, str, v8::String::kNormalString, strlen(str))
-
 namespace r2 {
+	var::var() : isolate(0) { }
 	var::var(Isolate* i, const Local<Value>& v) : isolate(i), value(v) { }
 	var::var(Isolate* i, const string& jsonValue) : isolate(i) {
 		auto context = isolate->GetCurrentContext();
@@ -111,6 +113,8 @@ namespace r2 {
 			v.ToLocal(&local);
 			return var(isolate, local);
 		}
+
+		return *this;
 	}
 
 	trace::trace(Isolate* isolate) {
@@ -183,16 +187,14 @@ namespace r2 {
 		r2Error(text.c_str());
 	}
 
-	void dispatch(v8Args args) {
+	void dispatch(const event& evt) {
 		r2engine* engine = r2engine::get();
-		auto isolate = args.GetIsolate();
-		auto context = isolate->GetCurrentContext();
-		auto global = context->Global();
+		engine->dispatch(const_cast<event*>(&evt));
+	}
 
-		auto s = unwrapArg<event>(args[0]);
-		s->set_v8_local(&args[0]);
-		engine->dispatch(s);
-		s->set_v8_local(nullptr);
+	void logs(v8Args args) {
+		auto lines = r2engine::get()->logs()->lines();
+		args.GetReturnValue().Set(to_v8(args.GetIsolate(), lines));
 	}
 
 	void open_window(v8Args args) {
@@ -280,26 +282,46 @@ namespace r2 {
 		args.GetReturnValue().Set(engine->open_window(v_width, v_height, v_title, v_can_resize, v_fullscreen));
 	}
 
-	void bind_engine(r2engine* eng, context* ctx) {
-		bind_event(eng, ctx);
+	void register_state(state* s) {
+		r2engine::get()->states()->register_state(s);
+	}
+
+	void activate_state(const string& stateName) {
+		r2engine::get()->states()->activate(stateName);
+	}
+
+	void bind_engine(context* ctx) {
+		bind_event(ctx);
 		bind_math(ctx);
 		bind_imgui(ctx);
+		bind_graphics(ctx);
 
 		auto isolate = ctx->isolate();
 		auto context = isolate->GetCurrentContext();
 		auto global = context->Global();
 
-		v8::Handle<v8::ObjectTemplate> t = ObjectTemplate::New(isolate);
-		t->SetInternalFieldCount(1);
-		t->Set(v8str("log"), FunctionTemplate::New(isolate, log));
-		t->Set(v8str("warn"), FunctionTemplate::New(isolate, warn));
-		t->Set(v8str("error"), FunctionTemplate::New(isolate, error));
-		t->Set(v8str("dispatch"), FunctionTemplate::New(isolate, dispatch));
-		t->Set(v8str("open_window"), FunctionTemplate::New(isolate, open_window));
-		v8::MaybeLocal<v8::Object> maybeLocalSelf = t->NewInstance(context);
-		LocalObjectHandle self;
-		maybeLocalSelf.ToLocal(&self);
+		Local<Array> states = Local<Array>::New(isolate, Array::New(isolate));
+		global->Set(v8str("_states"), states);
 
-		global->Set(v8str("engine"), self);
+		module m(isolate);
+
+		{
+			class_<state, raw_ptr_traits> s(isolate);
+			s.ctor<v8Args>();
+			s.set("set_update_frequency", &state::setUpdateFrequency);
+			s.set("get_average_update_duration", &state::getAverageUpdateDuration);
+			m.set("State", s);
+		}
+
+		m.set("log", &log);
+		m.set("warn", &warn);
+		m.set("error", &error);
+		m.set("dispatch", &dispatch);
+		m.set("logs", &logs);
+		m.set("open_window", &open_window);
+		m.set("register_state", &register_state);
+		m.set("activate_state", &activate_state);
+
+		global->Set(v8str("engine"), m.new_instance());
 	}
 }

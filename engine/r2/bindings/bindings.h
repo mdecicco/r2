@@ -1,15 +1,24 @@
-#include <v8pp/context.hpp>
-#include <libplatform/libplatform.h>
+#pragma once
+#include <r2/config.h>
+
+#include <string>
 #include <v8.h>
 
-#include <r2/config.h>
-#include <r2/utilities/imgui/imgui.h>
+
+#define v8str(str) v8::String::NewFromUtf8(isolate, str)
+namespace v8pp {
+	class context;
+};
 
 namespace r2 {
 	class r2engine;
+
 	struct var {
+		var();
 		var(v8::Isolate* i, const v8::Local<v8::Value>& v);
 		var(v8::Isolate* i, const std::string& jsonValue);
+		template <typename T>
+		var(v8::Isolate* i, T v) : isolate(i), value(v8pp::to_v8(i, v)) { }
 		~var();
 
 		operator std::string();
@@ -35,7 +44,6 @@ namespace r2 {
 		Vector2(f32 _x, f32 _y);
 		~Vector2();
 
-		ImVec2 to_imgui() const;
 		bool operator ==(const Vector2& rhs) const;
 		bool operator !=(const Vector2& rhs) const;
 
@@ -59,7 +67,6 @@ namespace r2 {
 		Vector4(f32 _x, f32 _y, f32 _z, f32 _w);
 		~Vector4();
 
-		ImVec4 to_imgui() const;
 		bool operator ==(const Vector4& rhs) const;
 		bool operator !=(const Vector4& rhs) const;
 
@@ -68,8 +75,6 @@ namespace r2 {
 		f32 z;
 		f32 w;
 	};
-
-	v8::Local<v8::FunctionTemplate> create_class(v8pp::context* ctx, const std::string& className, v8::FunctionCallback constructor);
 
 	struct trace {
 		trace(v8::Isolate* isolate);
@@ -81,44 +86,9 @@ namespace r2 {
 
 	typedef const v8::FunctionCallbackInfo<v8::Value>& v8Args;
 
-	template <typename T>
-	T* unwrap(v8Args args) {
-		auto self = args.Holder();
-		auto wrap = v8::Local<v8::External>::Cast(self->GetInternalField(0));
-		return static_cast<T*>(wrap->Value());
-	}
-
-	template <typename T>
-	T* unwrapArg(const v8::Local<v8::Value>& val) {
-		//auto self = args.Holder();
-		//auto wrap = v8::Local<v8::External>::Cast(self->GetInternalField(0));
-		//return static_cast<T*>(wrap->Value());
-		auto obj = v8::Local<v8::Object>::Cast(val);
-		auto wrap = v8::Local<v8::External>::Cast(obj->GetInternalField(0));
-		return static_cast<T*>(wrap->Value());
-	}
-
-	/*
-	* Construct a new c++ object and wrap it in a js object
-	*/
-	template <typename T, typename... Args>
-	v8::Persistent<v8::Object, v8::CopyablePersistentTraits<v8::Object>> make_object(v8::Handle<v8::Object> object, Args&&... args) {
-		auto isolate = object->GetIsolate();
-		auto x = new T(std::forward<Args>(args)...);
-		auto obj = v8::Persistent<Object, v8::CopyablePersistentTraits<Object>>(isolate, object);
-		obj.Get(isolate)->SetInternalField(0, v8::External::New(isolate, x));
-		v8::WeakCallbackInfo<T>::Callback cb = [](const v8::WeakCallbackInfo<T>& data) {
-			auto x = static_cast<T*>(data.GetInternalField(0));
-			delete x;
-		};
-
-		obj.SetWeak(x, cb, v8::WeakCallbackType::kParameter);
-
-		return obj;
-	}
-
-	void bind_engine(r2engine* eng, v8pp::context* ctx);
-	void bind_event(r2engine* eng, v8pp::context* ctx);
+	void bind_engine(v8pp::context* ctx);
+	void bind_event(v8pp::context* ctx);
 	void bind_math(v8pp::context* ctx);
 	void bind_imgui(v8pp::context* ctx);
+	void bind_graphics(v8pp::context* ctx);
 }

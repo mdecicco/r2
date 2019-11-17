@@ -1,8 +1,14 @@
 #include <r2/bindings/bindings.h>
+#include <r2/utilities/imgui/imgui.h>
+
+#include <v8pp/context.hpp>
 #include <v8pp/module.hpp>
 #include <v8pp/class.hpp>
 #include <v8pp/factory.hpp>
+#include <v8pp/config.hpp>
+
 #include <functional>
+#include <algorithm>
 
 using namespace v8;
 using namespace v8pp;
@@ -28,19 +34,6 @@ namespace r2 {
 		}
 	};
 
-	ImVec2* v2ctor(v8::FunctionCallbackInfo<v8::Value> const& args) {
-		v8::Isolate* isolate = args.GetIsolate();
-		if (args.Length() == 0) {
-			return v8pp::factory<ImVec2, v8pp::raw_ptr_traits>::create(isolate);
-		} else if (args.Length() == 2 && args[0]->IsObject() && args[1]->IsObject()) {
-			f32 x = v8pp::from_v8<f32>(isolate, args[0]);
-			f32 y = v8pp::from_v8<f32>(isolate, args[1]);
-			return v8pp::factory<ImVec2, v8pp::raw_ptr_traits>::create(isolate, x, y);
-		} else {
-			throw std::runtime_error("unsupported arguments");
-		}
-	}
-
 	int get_flags(const vector<int>& flags) {
 		int flag_input = 0;
 		
@@ -52,6 +45,20 @@ namespace r2 {
 		}
 
 		return flag_input;
+	}
+
+	string replace_in_str(string subject, const string& search, const string& replace) {
+		size_t pos = 0;
+		while ((pos = subject.find(search, pos)) != string::npos) {
+			subject.replace(pos, search.length(), replace);
+			pos += replace.length();
+		}
+		return subject;
+	}
+	string sanitizeText(const string& text) {
+		string t = text;
+		t = replace_in_str(t, "%", "%%");
+		return t;
 	}
 
 	bool Begin(const string& name, Local<Function> closed, const vector<i32>& flags) {
@@ -155,19 +162,19 @@ namespace r2 {
 		ImGui::TextUnformatted(text.c_str());
 	}
 	void TextColored(const ImVec4& color, const string& text) {
-		ImGui::TextColored(color, text.c_str());
+		ImGui::TextColored(color, sanitizeText(text).c_str());
 	}
 	void TextDisabled(const string& text) {
-		ImGui::TextDisabled(text.c_str());
+		ImGui::TextDisabled(sanitizeText(text).c_str());
 	}
 	void TextWrapped(const string& text) {
-		ImGui::TextWrapped(text.c_str());
+		ImGui::TextWrapped(sanitizeText(text).c_str());
 	}
 	void LabelText(const string& label, const string& text) {
-		ImGui::LabelText(label.c_str(), text.c_str());
+		ImGui::LabelText(label.c_str(), sanitizeText(text).c_str());
 	}
 	void BulletText(const string& text) {
-		ImGui::BulletText(text.c_str());
+		ImGui::BulletText(sanitizeText(text).c_str());
 	}
 	bool Checkbox(const string& label, bool checked, Local<Function> changed) {
 		bool cur = checked;
@@ -631,10 +638,14 @@ namespace r2 {
 		return ImGui::ListBoxHeader(label.c_str(), item_count, height_in_items);
 	}
 	void PlotLines(const string& label, const vector<f32>& values, i32 offset, const string& overlay, f32 min, f32 max, const ImVec2& size) {
-		ImGui::PlotLines(label.c_str(), &values[0], values.size(), offset, overlay.c_str(), min, max, size);
+		const f32* ptr = 0;
+		if (values.size() > 0) ptr = &values[0];
+		ImGui::PlotLines(label.c_str(), ptr, values.size(), offset, overlay.c_str(), min, max, size);
 	}
 	void PlotHistogram(const string& label, const vector<f32>& values, i32 offset, const string& overlay, f32 min, f32 max, const ImVec2& size) {
-		ImGui::PlotHistogram(label.c_str(), &values[0], values.size(), offset, overlay.c_str(), min, max, size);
+		const f32* ptr = 0;
+		if (values.size() > 0) ptr = &values[0];
+		ImGui::PlotHistogram(label.c_str(), ptr, values.size(), offset, overlay.c_str(), min, max, size);
 	}
 	void BoolValue(const string& prefix, bool val) {
 		ImGui::Value(prefix.c_str(), val);
@@ -693,7 +704,7 @@ namespace r2 {
 		return ret;
 	}
 	void LogText(const string& text) {
-		ImGui::LogText(text.c_str());
+		ImGui::LogText(sanitizeText(text).c_str());
 	}
 	bool IsItemHovered(const vector<i32>& flags) {
 		return ImGui::IsItemHovered(get_flags(flags));
@@ -717,6 +728,15 @@ namespace r2 {
 		r.end = -1;
 		ImGui::CalcListClipping(count, items_height, &r.start, &r.end);
 		return r;
+	}
+	void PushStyleColor(ImGuiCol idx, const ImVec4& color) {
+		ImGui::PushStyleColor(idx, color);
+	}
+	void PushStyleVarFloat(ImGuiStyleVar idx, float value) {
+		ImGui::PushStyleVar(idx, value);
+	}
+	void PushStyleVarVec2(ImGuiStyleVar idx, const ImVec2& value) {
+		ImGui::PushStyleVar(idx, value);
 	}
 	
 	void register_enums(module& imgui) {
@@ -1070,7 +1090,7 @@ namespace r2 {
 			m.set_const("ModalWindowDimBg", ImGuiCol_ModalWindowDimBg);
 			m.set_const("ModalWindowDarkening", ImGuiCol_ModalWindowDarkening);
 			m.set_const("ChildWindowBg", ImGuiCol_ChildWindowBg);
-			imgui.set("Col", m);
+			imgui.set("Color", m);
 		}
 
 		//ImGuiStyleVar
@@ -1193,9 +1213,8 @@ namespace r2 {
 	void register_structs(module& m) {
 		//ImVec2
 		{
-			std::function<ImVec2* (v8::FunctionCallbackInfo<v8::Value> const&)> v2c = v2ctor;
 			class_<ImVec2, v8pp::raw_ptr_traits> s(m.isolate());
-			s.ctor(v2c);
+			s.ctor<f32, f32>();
 			s.set("x", &ImVec2::x);
 			s.set("y", &ImVec2::y);
 			m.set("ImVec2", s);
@@ -1341,6 +1360,14 @@ namespace r2 {
 		m.set("SetScrollHereY", &ImGui::SetScrollHereY);
 		m.set("SetScrollFromPosX", &ImGui::SetScrollFromPosX);
 		m.set("SetScrollFromPosY", &ImGui::SetScrollFromPosY);
+		m.set("PushStyleColor", &PushStyleColor);
+		m.set("PopStyleColor", &ImGui::PopStyleColor);
+		m.set("PushStyleVarFloat", &PushStyleVarFloat);
+		m.set("PushStyleVarVec2", &PushStyleVarVec2);
+		m.set("GetStyleColorVec4", &ImGui::GetStyleColorVec4);
+		m.set("GetStyleColorName", &ImGui::GetStyleColorName);
+		m.set("GetFontSize", &ImGui::GetFontSize);
+		m.set("PopStyleVar", &ImGui::PopStyleVar);
 		m.set("PushItemWidth", &ImGui::PushItemWidth);
 		m.set("PopItemWidth", &ImGui::PopItemWidth);
 		m.set("SetNextItemWidth", &ImGui::SetNextItemWidth);
@@ -1374,7 +1401,7 @@ namespace r2 {
 		m.set("GetTextLineHeightWithSpacing", ImGui::GetTextLineHeightWithSpacing);
 		m.set("GetFrameHeight", ImGui::GetFrameHeight);
 		m.set("GetFrameHeightWithSpacing", ImGui::GetFrameHeightWithSpacing);
-		m.set("TextUnformatted", &TextUnformatted);
+		m.set("Text", &TextUnformatted);
 		m.set("TextColored", &TextColored);
 		m.set("TextDisabled", &TextDisabled);
 		m.set("TextWrapped", &TextWrapped);
