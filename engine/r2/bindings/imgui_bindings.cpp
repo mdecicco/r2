@@ -1,4 +1,4 @@
-#include <r2/bindings/bindings.h>
+#include <r2/engine.h>
 #include <r2/utilities/imgui/imgui.h>
 
 #include <v8pp/context.hpp>
@@ -6,6 +6,7 @@
 #include <v8pp/class.hpp>
 #include <v8pp/factory.hpp>
 #include <v8pp/config.hpp>
+#include <r2/bindings/math_converters.h>
 
 #include <functional>
 #include <algorithm>
@@ -16,25 +17,101 @@ using namespace std;
 
 #define v8str(str) v8::String::NewFromUtf8(isolate, str, v8::String::kNormalString, strlen(str))
 
+using namespace r2;
+namespace v8pp {
+	bool _is_valid_imv4(v8::Isolate* isolate, v8::Handle<v8::Value> value) {
+		return convert<vec4f>::is_valid(isolate, value);
+	}
+
+	template <typename T>
+	T _from_v8_imv4(v8::Isolate* isolate, v8::Local<v8::Value> value) {
+		vec4f v = convert<vec4f>::from_v8(isolate, value);
+		return ImVec4(v.x, v.y, v.z, v.w);
+	}
+
+	template <typename T>
+	v8::Handle<v8::Object> _to_v8_imv4(v8::Isolate* isolate, T const& value) {
+		return convert<vec4f>::to_v8(isolate, vec4f(value.x, value.y, value.z, value.w));
+	}
+
+	template <typename T>
+	v8::Handle<v8::Object> _to_v8_imc(v8::Isolate* isolate, T const& value) {
+		v8::EscapableHandleScope scope(isolate);
+		v8::Local<v8::Object> obj = v8::Object::New(isolate);
+
+		obj->Set(v8str("r"), convert<f32>::to_v8(isolate, value.Value.x));
+		obj->Set(v8str("g"), convert<f32>::to_v8(isolate, value.Value.y));
+		obj->Set(v8str("b"), convert<f32>::to_v8(isolate, value.Value.z));
+		obj->Set(v8str("a"), convert<f32>::to_v8(isolate, value.Value.w));
+
+		return scope.Escape(obj);
+	}
+
+	bool _is_valid_imv2(v8::Isolate* isolate, v8::Handle<v8::Value> value) {
+		return convert<vec2f>::is_valid(isolate, value);
+	}
+
+	template <typename T>
+	T _from_v8_imv2(v8::Isolate* isolate, v8::Local<v8::Value> value) {
+		vec2f v = convert<vec2f>::from_v8(isolate, value);
+		return ImVec2(v.x, v.y);
+	}
+
+	template <typename T>
+	v8::Handle<v8::Object> _to_v8_imv2(v8::Isolate* isolate, T const& value) {
+		return convert<vec2f>::to_v8(isolate, vec2f(value.x, value.y));
+	}
+
+	template<>
+	struct convert<ImVec4> {
+		using from_type = ImVec4;
+		using to_type = v8::Handle<v8::Object>;
+
+		static bool is_valid(v8::Isolate* isolate, v8::Handle<v8::Value> value) { return _is_valid_imv4(isolate, value); }
+		static from_type from_v8(v8::Isolate* isolate, v8::Local<v8::Value> value) { return _from_v8_imv4<from_type>(isolate, value); }
+		static v8::Handle<v8::Object> to_v8(v8::Isolate* isolate, from_type const& value) { return _to_v8_imv4<from_type>(isolate, value); }
+	};
+
+	template<>
+	struct convert<ImVec2> {
+		using from_type = ImVec2;
+		using to_type = v8::Handle<v8::Object>;
+
+		static bool is_valid(v8::Isolate* isolate, v8::Handle<v8::Value> value) { return _is_valid_imv2(isolate, value); }
+		static from_type from_v8(v8::Isolate* isolate, v8::Local<v8::Value> value) { return _from_v8_imv2<from_type>(isolate, value); }
+		static v8::Handle<v8::Object> to_v8(v8::Isolate* isolate, from_type const& value) { return _to_v8_imv2<from_type>(isolate, value); }
+	};
+
+	template<>
+	struct convert<ImColor> {
+		using from_type = ImColor;
+		using to_type = v8::Handle<v8::Object>;
+
+		static bool is_valid(v8::Isolate* isolate, v8::Handle<v8::Value> value) { return _is_valid_imv4(isolate, value); }
+		static from_type from_v8(v8::Isolate* isolate, v8::Local<v8::Value> value) { return _from_v8_imv4<from_type>(isolate, value); }
+		static v8::Handle<v8::Object> to_v8(v8::Isolate* isolate, from_type const& value) { return _to_v8_imc<from_type>(isolate, value); }
+	};
+}
+
 namespace r2 {
 	struct ImGuiInputTextCallbackData_custom : public ImGuiInputTextCallbackData {
 		ImGuiInputTextCallbackData_custom(const ImGuiInputTextCallbackData_custom& o) {
 			memcpy(this, &o, sizeof(ImGuiInputTextCallbackData_custom));
 		}
-		std::string get_buf() { return Buf; }
-		void set_buf(const string& str) { snprintf(Buf, BufSize, str.c_str()); BufTextLen = str.length(); }
+		mstring get_buf() { return Buf; }
+		void set_buf(const mstring& str) { snprintf(Buf, BufSize, str.c_str()); BufTextLen = str.length(); }
 	};
 
 	struct ImGuiPayload_custom : public ImGuiPayload {
-		std::vector<u8> get_data() {
-			vector<u8> d;
+		mvector<u8> get_data() {
+			mvector<u8> d;
 			d.resize(DataSize);
 			memcpy(&d[0], Data, DataSize);
 			return d;
 		}
 	};
 
-	int get_flags(const vector<int>& flags) {
+	int get_flags(const mvector<int>& flags) {
 		int flag_input = 0;
 		
 		if (flags.size() > 0) {
@@ -47,21 +124,21 @@ namespace r2 {
 		return flag_input;
 	}
 
-	string replace_in_str(string subject, const string& search, const string& replace) {
+	mstring replace_in_str(mstring subject, const mstring& search, const mstring& replace) {
 		size_t pos = 0;
-		while ((pos = subject.find(search, pos)) != string::npos) {
+		while ((pos = subject.find(search, pos)) != mstring::npos) {
 			subject.replace(pos, search.length(), replace);
 			pos += replace.length();
 		}
 		return subject;
 	}
-	string sanitizeText(const string& text) {
-		string t = text;
+	mstring sanitizeText(const mstring& text) {
+		mstring t = text;
 		t = replace_in_str(t, "%", "%%");
 		return t;
 	}
 
-	bool Begin(const string& name, Local<Function> closed, const vector<i32>& flags) {
+	bool Begin(const mstring& name, Local<Function> closed, const mvector<i32>& flags) {
 		bool open = true;
 		bool ret = ImGui::Begin(name.c_str(), &open, get_flags(flags));
 		if (!open) {
@@ -72,7 +149,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool BeginWithSize(const string& name, const ImVec2& size, f32 opacity, Local<Function> closed, const vector<i32>& flags) {
+	bool BeginWithSize(const mstring& name, const ImVec2& size, f32 opacity, Local<Function> closed, const mvector<i32>& flags) {
 		bool open = true;
 		bool ret = ImGui::Begin(name.c_str(), &open, size, opacity, get_flags(flags));
 		if (!open) {
@@ -86,10 +163,10 @@ namespace r2 {
 	void End() {
 		ImGui::End();
 	}
-	bool BeginChild1(const string& id, const ImVec2& size, bool border, const vector<int>& flags) {
+	bool BeginChild1(const mstring& id, const ImVec2& size, bool border, const mvector<int>& flags) {
 		return ImGui::BeginChild(id.c_str(), size, border, get_flags(flags));;
 	}
-	bool BeginChild2(ImGuiID id, const ImVec2& size, bool border, const vector<int>& flags) {
+	bool BeginChild2(ImGuiID id, const ImVec2& size, bool border, const mvector<int>& flags) {
 		return ImGui::BeginChild(id, size, border, get_flags(flags));
 	}
 	void EndChild() {
@@ -158,25 +235,25 @@ namespace r2 {
 	void SetWindowFocus2(const char* name) {
 		ImGui::SetWindowFocus(name);
 	}
-	void TextUnformatted(const string& text) {
+	void TextUnformatted(const mstring& text) {
 		ImGui::TextUnformatted(text.c_str());
 	}
-	void TextColored(const ImVec4& color, const string& text) {
+	void TextColored(const ImVec4& color, const mstring& text) {
 		ImGui::TextColored(color, sanitizeText(text).c_str());
 	}
-	void TextDisabled(const string& text) {
+	void TextDisabled(const mstring& text) {
 		ImGui::TextDisabled(sanitizeText(text).c_str());
 	}
-	void TextWrapped(const string& text) {
+	void TextWrapped(const mstring& text) {
 		ImGui::TextWrapped(sanitizeText(text).c_str());
 	}
-	void LabelText(const string& label, const string& text) {
+	void LabelText(const mstring& label, const mstring& text) {
 		ImGui::LabelText(label.c_str(), sanitizeText(text).c_str());
 	}
-	void BulletText(const string& text) {
+	void BulletText(const mstring& text) {
 		ImGui::BulletText(sanitizeText(text).c_str());
 	}
-	bool Checkbox(const string& label, bool checked, Local<Function> changed) {
+	bool Checkbox(const mstring& label, bool checked, Local<Function> changed) {
 		bool cur = checked;
 		bool ret = ImGui::Checkbox(label.c_str(), &cur);
 
@@ -189,10 +266,10 @@ namespace r2 {
 
 		return ret;
 	}
-	bool BeginCombo(const string& label, const string& preview, const vector<int>& flags) {
+	bool BeginCombo(const mstring& label, const mstring& preview, const mvector<int>& flags) {
 		return ImGui::BeginCombo(label.c_str(), preview.c_str(), get_flags(flags));
 	}
-	bool Combo(const string& label, i32 current, const vector<string>items, i32 max_items, Local<Function> changed) {
+	bool Combo(const mstring& label, i32 current, const mvector<mstring>items, i32 max_items, Local<Function> changed) {
 		i32 cur = current;
 		const char* citems[512] = { 0 };
 		for(u16 i = 0; i < items.size() && i < 512;i++) citems[i] = items[i].c_str();
@@ -207,7 +284,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool DragFloat(const string& label, f32 current, f32 speed, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
+	bool DragFloat(const mstring& label, f32 current, f32 speed, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
 		f32 cur = current;
 		bool ret = ImGui::DragFloat(label.c_str(), &cur, speed, min, max, fmt.c_str(), power);
 
@@ -220,8 +297,8 @@ namespace r2 {
 
 		return ret;
 	}
-	bool DragFloat2(const string& label, const Vector2& current, f32 speed, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
-		Vector2 cur = current;
+	bool DragFloat2(const mstring& label, const vec2f& current, f32 speed, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
+		vec2f cur = current;
 		bool ret = ImGui::DragFloat2(label.c_str(), &cur.x, speed, min, max, fmt.c_str(), power);
 
 		if (cur.x != current.x || cur.y != cur.y) {
@@ -233,8 +310,8 @@ namespace r2 {
 
 		return ret;
 	}
-	bool DragFloat3(const string& label, const Vector3& current, f32 speed, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
-		Vector3 cur = current;
+	bool DragFloat3(const mstring& label, const vec3f& current, f32 speed, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
+		vec3f cur = current;
 		bool ret = ImGui::DragFloat3(label.c_str(), &cur.x, speed, min, max, fmt.c_str(), power);
 
 		if (cur.x != current.x || cur.y != current.y || cur.z != current.z) {
@@ -246,8 +323,8 @@ namespace r2 {
 
 		return ret;
 	}
-	bool DragFloat4(const string& label, const Vector4& current, f32 speed, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
-		Vector4 cur = current;
+	bool DragFloat4(const mstring& label, const vec4f& current, f32 speed, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
+		vec4f cur = current;
 		bool ret = ImGui::DragFloat3(label.c_str(), &cur.x, speed, min, max, fmt.c_str(), power);
 
 		if (cur.x != current.x || cur.y != current.y || cur.z != current.z || cur.w != current.w) {
@@ -259,7 +336,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool DragInt(const string& label, i32 current, f32 speed, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
+	bool DragInt(const mstring& label, i32 current, f32 speed, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
 		i32 cur = current;
 		bool ret = ImGui::DragInt(label.c_str(), &cur, speed, min, max, fmt.c_str());
 
@@ -272,7 +349,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool DragFloatRange(const string& label, f32 cur_min, f32 cur_max, f32 speed, f32 min, f32 max, const string& fmt_min, const string& fmt_max, f32 power, Local<Function> changed) {
+	bool DragFloatRange(const mstring& label, f32 cur_min, f32 cur_max, f32 speed, f32 min, f32 max, const mstring& fmt_min, const mstring& fmt_max, f32 power, Local<Function> changed) {
 		f32 cmin = cur_min;
 		f32 cmax = cur_max;
 		bool ret = ImGui::DragFloatRange2(label.c_str(), &cmin, &cmax, speed, min, max, fmt_min.c_str(), fmt_max.c_str(), power);
@@ -286,7 +363,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool DragIntRange(const string& label, i32 cur_min, i32 cur_max, f32 speed, i32 min, i32 max, const string& fmt_min, const string& fmt_max, Local<Function> changed) {
+	bool DragIntRange(const mstring& label, i32 cur_min, i32 cur_max, f32 speed, i32 min, i32 max, const mstring& fmt_min, const mstring& fmt_max, Local<Function> changed) {
 		i32 cmin = cur_min;
 		i32 cmax = cur_max;
 		bool ret = ImGui::DragIntRange2(label.c_str(), &cmin, &cmax, speed, min, max, fmt_min.c_str(), fmt_max.c_str());
@@ -300,7 +377,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool SliderFloat(const string& label, f32 current, f32 speed, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
+	bool SliderFloat(const mstring& label, f32 current, f32 speed, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
 		f32 cur = current;
 		bool ret = ImGui::SliderFloat(label.c_str(), &cur, min, max, fmt.c_str(), power);
 
@@ -313,8 +390,8 @@ namespace r2 {
 
 		return ret;
 	}
-	bool SliderFloat2(const string& label, const Vector2& current, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
-		Vector2 cur = current;
+	bool SliderFloat2(const mstring& label, const vec2f& current, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
+		vec2f cur = current;
 		bool ret = ImGui::SliderFloat2(label.c_str(), &cur.x, min, max, fmt.c_str(), power);
 
 		if (cur.x != current.x || cur.y != cur.y) {
@@ -326,8 +403,8 @@ namespace r2 {
 
 		return ret;
 	}
-	bool SliderFloat3(const string& label, const Vector3& current, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
-		Vector3 cur = current;
+	bool SliderFloat3(const mstring& label, const vec3f& current, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
+		vec3f cur = current;
 		bool ret = ImGui::SliderFloat3(label.c_str(), &cur.x, min, max, fmt.c_str(), power);
 
 		if (cur.x != current.x || cur.y != current.y || cur.z != current.z) {
@@ -339,8 +416,8 @@ namespace r2 {
 
 		return ret;
 	}
-	bool SliderFloat4(const string& label, const Vector4& current, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
-		Vector4 cur = current;
+	bool SliderFloat4(const mstring& label, const vec4f& current, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
+		vec4f cur = current;
 		bool ret = ImGui::SliderFloat3(label.c_str(), &cur.x, min, max, fmt.c_str(), power);
 
 		if (cur.x != current.x || cur.y != current.y || cur.z != current.z || cur.w != current.w) {
@@ -352,7 +429,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool SliderAngle(const string& label, f32 current, f32 min_deg, f32 max_deg, const string& fmt, Local<Function> changed) {
+	bool SliderAngle(const mstring& label, f32 current, f32 min_deg, f32 max_deg, const mstring& fmt, Local<Function> changed) {
 		f32 cur = current;
 		bool ret = ImGui::SliderAngle(label.c_str(), &cur, min_deg, max_deg, fmt.c_str());
 
@@ -365,7 +442,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool SliderInt(const string& label, i32 current, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
+	bool SliderInt(const mstring& label, i32 current, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
 		i32 cur = current;
 		bool ret = ImGui::SliderInt(label.c_str(), &cur, min, max, fmt.c_str());
 
@@ -378,7 +455,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool VSliderFloat(const string& label, const ImVec2& size, f32 current, f32 speed, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
+	bool VSliderFloat(const mstring& label, const ImVec2& size, f32 current, f32 speed, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
 		f32 cur = current;
 		bool ret = ImGui::VSliderFloat(label.c_str(), size, &cur, min, max, fmt.c_str(), power);
 
@@ -391,7 +468,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool VSliderInt(const string& label, const ImVec2& size, i32 current, f32 min, f32 max, const string& fmt, f32 power, Local<Function> changed) {
+	bool VSliderInt(const mstring& label, const ImVec2& size, i32 current, f32 min, f32 max, const mstring& fmt, f32 power, Local<Function> changed) {
 		i32 cur = current;
 		bool ret = ImGui::VSliderInt(label.c_str(), size, &cur, min, max, fmt.c_str());
 
@@ -404,7 +481,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool InputText(const string& label, const string& text, i32 max_len, const vector<int>& flags, Local<Function> changed) {
+	bool InputText(const mstring& label, const mstring& text, i32 max_len, const mvector<int>& flags, Local<Function> changed) {
 		static char buf[1024] = { 0 };
 		memset(buf, 0, 1024);
 		if (max_len > 1023) max_len = 1023;
@@ -412,7 +489,7 @@ namespace r2 {
 		
 		bool ret = ImGui::InputText(label.c_str(), buf, max_len, get_flags(flags));
 
-		string newStr = buf;
+		mstring newStr = buf;
 		if (newStr != text) {
 			auto ctx = changed->CreationContext();
 			auto isolate = changed->GetIsolate();
@@ -422,7 +499,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool InputTextMultiline(const string& label, const string& text, i32 max_len, const ImVec2& size, const vector<int>& flags, Local<Function> changed) {
+	bool InputTextMultiline(const mstring& label, const mstring& text, i32 max_len, const ImVec2& size, const mvector<int>& flags, Local<Function> changed) {
 		static char buf[16384] = { 0 };
 		memset(buf, 0, 16384);
 		if (max_len > 16383) max_len = 16383;
@@ -430,7 +507,7 @@ namespace r2 {
 
 		bool ret = ImGui::InputTextMultiline(label.c_str(), buf, max_len, size, get_flags(flags));
 
-		string newStr = buf;
+		mstring newStr = buf;
 		if (newStr != text) {
 			auto ctx = changed->CreationContext();
 			auto isolate = changed->GetIsolate();
@@ -440,7 +517,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool InputTextWithHint(const string& label, const string& hint, const string& text, i32 max_len, const vector<int>& flags, Local<Function> changed) {
+	bool InputTextWithHint(const mstring& label, const mstring& hint, const mstring& text, i32 max_len, const mvector<int>& flags, Local<Function> changed) {
 		static char buf[1024] = { 0 };
 		memset(buf, 0, 1024);
 		if (max_len > 1023) max_len = 1023;
@@ -448,7 +525,7 @@ namespace r2 {
 
 		bool ret = ImGui::InputTextWithHint(label.c_str(), hint.c_str(), buf, max_len, get_flags(flags));
 
-		string newStr = buf;
+		mstring newStr = buf;
 		if (newStr != text) {
 			auto ctx = changed->CreationContext();
 			auto isolate = changed->GetIsolate();
@@ -458,7 +535,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool InputFloat(const string& label, f32 current, f32 step, f32 step_fast, const string& fmt, const vector<i32>& flags, Local<Function> changed) {
+	bool InputFloat(const mstring& label, f32 current, f32 step, f32 step_fast, const mstring& fmt, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::InputFloat(label.c_str(), &cur, step, step_fast, fmt.c_str());
 
@@ -471,7 +548,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool InputFloat2(const string& label, const Vector2& current, const string& fmt, const vector<i32>& flags, Local<Function> changed) {
+	bool InputFloat2(const mstring& label, const vec2f& current, const mstring& fmt, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::InputFloat2(label.c_str(), &cur.x, fmt.c_str(), get_flags(flags));
 
@@ -484,7 +561,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool InputFloat3(const string& label, const Vector3& current, const string& fmt, const vector<i32>& flags, Local<Function> changed) {
+	bool InputFloat3(const mstring& label, const vec3f& current, const mstring& fmt, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::InputFloat3(label.c_str(), &cur.x, fmt.c_str(), get_flags(flags));
 
@@ -497,7 +574,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool InputFloat4(const string& label, const Vector4& current, const string& fmt, const vector<i32>& flags, Local<Function> changed) {
+	bool InputFloat4(const mstring& label, const vec4f& current, const mstring& fmt, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::InputFloat4(label.c_str(), &cur.x, fmt.c_str(), get_flags(flags));
 
@@ -510,7 +587,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool InputInt(const string& label, i32 current, i32 step, i32 step_fast, const vector<i32>& flags, Local<Function> changed) {
+	bool InputInt(const mstring& label, i32 current, i32 step, i32 step_fast, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::InputInt(label.c_str(), &cur, step, step_fast);
 
@@ -523,7 +600,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool ColorEdit3(const string& label, ImColor& current, const vector<i32>& flags, Local<Function> changed) {
+	bool ColorEdit3(const mstring& label, ImColor& current, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::ColorEdit3(label.c_str(), &current.Value.x, get_flags(flags));
 
@@ -536,7 +613,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool ColorEdit4(const string& label, ImColor& current, const vector<i32>& flags, Local<Function> changed) {
+	bool ColorEdit4(const mstring& label, ImColor& current, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::ColorEdit4(label.c_str(), &current.Value.x, get_flags(flags));
 
@@ -549,7 +626,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool ColorPicker3(const string& label, ImColor& current, const vector<i32>& flags, Local<Function> changed) {
+	bool ColorPicker3(const mstring& label, ImColor& current, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::ColorEdit3(label.c_str(), &current.Value.x, get_flags(flags));
 
@@ -562,7 +639,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool ColorPicker4(const string& label, ImColor& current, const vector<i32>& flags, Local<Function> changed) {
+	bool ColorPicker4(const mstring& label, ImColor& current, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::ColorPicker4(label.c_str(), &current.Value.x, get_flags(flags));
 
@@ -575,7 +652,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool ColorPicker4Ref(const string& label, ImColor& current, ImColor& ref, const vector<i32>& flags, Local<Function> changed) {
+	bool ColorPicker4Ref(const mstring& label, ImColor& current, ImColor& ref, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::ColorPicker4(label.c_str(), &current.Value.x, get_flags(flags), &ref.Value.x);
 
@@ -588,22 +665,22 @@ namespace r2 {
 
 		return ret;
 	}
-	bool ColorButton(const string& desc_id, const ImColor& color, const ImVec2& size, const vector<i32>& flags) {
+	bool ColorButton(const mstring& desc_id, const ImColor& color, const ImVec2& size, const mvector<i32>& flags) {
 		return ImGui::ColorButton(desc_id.c_str(), color.Value, get_flags(flags), size);
 	}
-	void SetColorEditOptions(const vector<i32>& flags) {
+	void SetColorEditOptions(const mvector<i32>& flags) {
 		ImGui::SetColorEditOptions(get_flags(flags));
 	}
-	bool TreeNode(const string& label, const vector<i32>& flags) {
+	bool TreeNode(const mstring& label, const mvector<i32>& flags) {
 		return ImGui::TreeNodeEx(label.c_str(), get_flags(flags));
 	}
-	void TreePush(const string& id) {
+	void TreePush(const mstring& id) {
 		ImGui::TreePush(id.c_str());
 	}
-	bool CollapsingHeader(const string& label, const vector<i32>& flags) {
+	bool CollapsingHeader(const mstring& label, const mvector<i32>& flags) {
 		return ImGui::CollapsingHeader(label.c_str(), get_flags(flags));
 	}
-	bool Selectable(const string& label, const ImVec2& size, bool current, const vector<i32>& flags, Local<Function> changed) {
+	bool Selectable(const mstring& label, const ImVec2& size, bool current, const mvector<i32>& flags, Local<Function> changed) {
 		auto cur = current;
 		bool ret = ImGui::Selectable(label.c_str(), &cur, get_flags(flags), size);
 
@@ -616,7 +693,7 @@ namespace r2 {
 
 		return ret;
 	}
-	bool ListBox(const string& label, i32 current, const vector<string>items, i32 max_items, Local<Function> changed) {
+	bool ListBox(const mstring& label, i32 current, const mvector<mstring>items, i32 max_items, Local<Function> changed) {
 		i32 cur = current;
 		const char* citems[512] = { 0 };
 		for(u16 i = 0; i < items.size() && i < 512;i++) citems[i] = items[i].c_str();
@@ -631,35 +708,35 @@ namespace r2 {
 
 		return ret;
 	}
-	bool ListBoxHeader(const string& label, const ImVec2& size) {
+	bool ListBoxHeader(const mstring& label, const ImVec2& size) {
 		return ImGui::ListBoxHeader(label.c_str(), size);
 	}
-	bool ListBoxHeader1(const string& label, i32 item_count, i32 height_in_items) {
+	bool ListBoxHeader1(const mstring& label, i32 item_count, i32 height_in_items) {
 		return ImGui::ListBoxHeader(label.c_str(), item_count, height_in_items);
 	}
-	void PlotLines(const string& label, const vector<f32>& values, i32 offset, const string& overlay, f32 min, f32 max, const ImVec2& size) {
+	void PlotLines(const mstring& label, const mvector<f32>& values, i32 offset, const mstring& overlay, f32 min, f32 max, const ImVec2& size) {
 		const f32* ptr = 0;
 		if (values.size() > 0) ptr = &values[0];
 		ImGui::PlotLines(label.c_str(), ptr, values.size(), offset, overlay.c_str(), min, max, size);
 	}
-	void PlotHistogram(const string& label, const vector<f32>& values, i32 offset, const string& overlay, f32 min, f32 max, const ImVec2& size) {
+	void PlotHistogram(const mstring& label, const mvector<f32>& values, i32 offset, const mstring& overlay, f32 min, f32 max, const ImVec2& size) {
 		const f32* ptr = 0;
 		if (values.size() > 0) ptr = &values[0];
 		ImGui::PlotHistogram(label.c_str(), ptr, values.size(), offset, overlay.c_str(), min, max, size);
 	}
-	void BoolValue(const string& prefix, bool val) {
+	void BoolValue(const mstring& prefix, bool val) {
 		ImGui::Value(prefix.c_str(), val);
 	}
-	void IntValue(const string& prefix, i32 val) {
+	void IntValue(const mstring& prefix, i32 val) {
 		ImGui::Value(prefix.c_str(), val);
 	}
-	void UIntValue(const string& prefix, u32 val) {
+	void UIntValue(const mstring& prefix, u32 val) {
 		ImGui::Value(prefix.c_str(), val);
 	}
-	void FloatValue(const string& prefix, f32 val, const string& fmt) {
+	void FloatValue(const mstring& prefix, f32 val, const mstring& fmt) {
 		ImGui::Value(prefix.c_str(), val, fmt.c_str());
 	}
-	bool MenuItem(const string& label, const string& shortcut, bool selected, bool enabled, Local<Function> changed) {
+	bool MenuItem(const mstring& label, const mstring& shortcut, bool selected, bool enabled, Local<Function> changed) {
 		bool cur = selected;
 		bool ret = ImGui::MenuItem(label.c_str(), shortcut.c_str(), &cur, enabled);
 
@@ -672,13 +749,13 @@ namespace r2 {
 
 		return ret;
 	}
-	void SetToolTip(const string& label) {
+	void SetToolTip(const mstring& label) {
 		ImGui::SetTooltip(label.c_str());
 	}
-	bool BeginPopup(const string& str_id, const vector<i32>& flags) {
+	bool BeginPopup(const mstring& str_id, const mvector<i32>& flags) {
 		return ImGui::BeginPopup(str_id.c_str(), get_flags(flags));
 	}
-	bool BeginPopupModal(const string& name, const vector<i32>& flags, Local<Function> closed) {
+	bool BeginPopupModal(const mstring& name, const mvector<i32>& flags, Local<Function> closed) {
 		bool open = true;
 		bool ret = ImGui::BeginPopupModal(name.c_str(), &open, get_flags(flags));
 		if (!open) {
@@ -689,10 +766,10 @@ namespace r2 {
 
 		return ret;
 	}
-	bool BeginTabBar(const string& str_id, const vector<i32>& flags) {
+	bool BeginTabBar(const mstring& str_id, const mvector<i32>& flags) {
 		return ImGui::BeginTabBar(str_id.c_str(), get_flags(flags));
 	}
-	bool BeginTabItem(const string& label, const vector<i32>& flags, Local<Function> closed) {
+	bool BeginTabItem(const mstring& label, const mvector<i32>& flags, Local<Function> closed) {
 		bool open = true;
 		bool ret = ImGui::BeginTabItem(label.c_str(), &open, get_flags(flags));
 		if (!open) {
@@ -703,22 +780,22 @@ namespace r2 {
 
 		return ret;
 	}
-	void LogText(const string& text) {
+	void LogText(const mstring& text) {
 		ImGui::LogText(sanitizeText(text).c_str());
 	}
-	bool IsItemHovered(const vector<i32>& flags) {
+	bool IsItemHovered(const mvector<i32>& flags) {
 		return ImGui::IsItemHovered(get_flags(flags));
 	}
 	bool IsRectVisible(const ImVec2& pos, const ImVec2& size) {
 		return ImGui::IsRectVisible(pos, ImVec2(pos.x + size.x, pos.y + size.y));
 	}
-	bool BeginChildFrame(ImGuiID id, const ImVec2& size, const vector<i32>& flags) {
+	bool BeginChildFrame(ImGuiID id, const ImVec2& size, const mvector<i32>& flags) {
 		return ImGui::BeginChildFrame(id, size, get_flags(flags));
 	}
 	bool IsMousePosValid() {
 		return ImGui::IsMousePosValid();
 	}
-	string SaveIniSettingsToMemory() {
+	mstring SaveIniSettingsToMemory() {
 		return ImGui::SaveIniSettingsToMemory();
 	}
 	struct ListClippingResult { i32 start, end; };
@@ -1211,9 +1288,11 @@ namespace r2 {
 		}
 	}
 	void register_structs(module& m) {
+		/*
 		//ImVec2
 		{
 			class_<ImVec2, v8pp::raw_ptr_traits> s(m.isolate());
+			register_class_state(s);
 			s.ctor<f32, f32>();
 			s.set("x", &ImVec2::x);
 			s.set("y", &ImVec2::y);
@@ -1223,6 +1302,7 @@ namespace r2 {
 		//ImVec4
 		{
 			class_<ImVec4, v8pp::raw_ptr_traits>s(m.isolate());
+			register_class_state(s);
 			s.ctor<f32, f32, f32, f32>();
 			s.set("x", &ImVec4::x);
 			s.set("y", &ImVec4::y);
@@ -1230,11 +1310,13 @@ namespace r2 {
 			s.set("w", &ImVec4::w);
 			m.set("ImVec4", s);
 		}
+		*/
 
 		//ImGuiInputTextCallbackData
 		/*
 		{
 			class_<ImGuiInputTextCallbackData_custom, v8pp::raw_ptr_traits>s(m.isolate());
+		register_class_state(s);
 			s.set("EventFlag", &ImGuiInputTextCallbackData_custom::EventFlag);
 			s.set("Flags", &ImGuiInputTextCallbackData_custom::Flags);
 			s.set("EventKey", &ImGuiInputTextCallbackData_custom::EventKey);
@@ -1255,6 +1337,7 @@ namespace r2 {
 		//ImGuiSizeCallbackData
 		{
 			class_<ImGuiSizeCallbackData, v8pp::raw_ptr_traits>s(m.isolate());
+			register_class_state(s);
 			s.set("Pos", &ImGuiSizeCallbackData::Pos);
 			s.set("CurrentSize", &ImGuiSizeCallbackData::CurrentSize);
 			s.set("DesiredSize", &ImGuiSizeCallbackData::DesiredSize);
@@ -1265,6 +1348,7 @@ namespace r2 {
 		/*
 		{
 			class_<ImGuiPayload_custom, v8pp::raw_ptr_traits>s(m.isolate());
+			register_class_state(s);
 			s.ctor();
 			s.set("Data", property(&ImGuiPayload_custom::get_data));
 			s.set("DataSize", &ImGuiPayload_custom::DataSize);
@@ -1276,11 +1360,11 @@ namespace r2 {
 			s.set("IsDelivery", &ImGuiPayload_custom::IsDelivery);
 			m.set("ImGuiPayload", s);
 		}
-		*/
 
 		//ImColor
 		{
 			class_<ImColor, v8pp::raw_ptr_traits>s(m.isolate());
+			register_class_state(s);
 			s.ctor<const ImVec4&>();
 			s.ctor<f32,f32,f32,f32>();
 			s.set("Value", &ImColor::Value);
@@ -1288,10 +1372,12 @@ namespace r2 {
 			//s.set_static("HSV", &ImColor::HSV, true);
 			m.set("ImColor", s);
 		}
+		*/
 
 		//ListClippingResult
 		{
 			class_<ListClippingResult, v8pp::raw_ptr_traits>s(m.isolate());
+			register_class_state(s);
 			s.set("start", &ListClippingResult::start);
 			s.set("end", &ListClippingResult::end);
 			m.set("ListClippingResult", s);
@@ -1576,5 +1662,23 @@ namespace r2 {
 		m.set("SetNextWindowPosCenter", &ImGui::SetNextWindowPosCenter);
 
 		isolate->GetCurrentContext()->Global()->Set(v8str("ImGui"), m.new_instance());
+	}
+
+	void release_imgui_objects() {
+		Isolate* i = r2engine::get()->scripts()->context()->isolate();
+		//detail::classes::find<raw_ptr_traits>(i, detail::type_id<ImColor>()).remove_objects();
+		detail::classes::find<raw_ptr_traits>(i, detail::type_id<ListClippingResult>()).remove_objects();
+		detail::classes::find<raw_ptr_traits>(i, detail::type_id<ImGuiSizeCallbackData>()).remove_objects();
+		//detail::classes::find<raw_ptr_traits>(i, detail::type_id<ImVec4>()).remove_objects();
+		//detail::classes::find<raw_ptr_traits>(i, detail::type_id<ImVec2>()).remove_objects();
+	}
+
+	void reset_imgui_object_storage() {
+		Isolate* i = r2engine::get()->scripts()->context()->isolate();
+		//detail::classes::find<raw_ptr_traits>(i, detail::type_id<ImColor>()).reset_objects_map();
+		detail::classes::find<raw_ptr_traits>(i, detail::type_id<ListClippingResult>()).reset_objects_map();
+		detail::classes::find<raw_ptr_traits>(i, detail::type_id<ImGuiSizeCallbackData>()).reset_objects_map();
+		//detail::classes::find<raw_ptr_traits>(i, detail::type_id<ImVec4>()).reset_objects_map();
+		//detail::classes::find<raw_ptr_traits>(i, detail::type_id<ImVec2>()).reset_objects_map();
 	}
 };

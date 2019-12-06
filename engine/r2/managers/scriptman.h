@@ -1,7 +1,7 @@
 #pragma once
 #include <r2/config.h>
 #include <r2/managers/assetman.h>
-#include <string>
+#include <r2/managers/memman.h>
 
 #include <v8pp/context.hpp>
 #include <v8pp/module.hpp>
@@ -9,6 +9,9 @@
 #include <v8.h>
 
 using namespace std;
+
+namespace v8pp {
+};
 
 namespace r2 {
 	class r2engine;
@@ -33,31 +36,20 @@ namespace r2 {
 			bool m_is_valid;
 	};
 
-	class script_env {
-		public:
-			script_env();
-			~script_env();
-
-			v8pp::context* context();
-			v8::HandleScope* scope() { return &m_scope; }
-
-		protected:
-			v8::HandleScope m_scope;
-	};
-
 	class script_man {
 		public:
-			script_man(r2engine* eng);
+			script_man();
 			~script_man();
 
-			void execute(const string& script);
-			void executeFile(const string& file);
+			void initialize();
 
-			v8pp::context* context() { return &m_context; }
+			void execute(const mstring& script);
+			void executeFile(const mstring& file);
+
+			v8pp::context* context() { return m_context; }
 
 		protected:
-			r2engine* m_engine;
-			v8pp::context m_context;
+			v8pp::context* m_context;
 			v8::HandleScope m_global_scope;
 	};
 };

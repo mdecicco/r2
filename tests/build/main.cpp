@@ -2,15 +2,15 @@
 
 int main(int argc, char** argv) {
 	r2::r2engine::create(argc, argv);
-    r2::r2engine* g_Engine = r2::r2engine::get();
-    const vector<string>& args = g_Engine->args();
+    r2::r2engine* eng = r2::r2engine::get();
+    const r2::mvector<r2::mstring>& args = eng->args();
 
-    for(unsigned int i = 0;i < args.size();i++) {
-        r2Log(g_Engine,"arg[%d]: %s",i,args[i].c_str());
+    for(r2::u8 i = 0;i < args.size();i++) {
+        r2Log("arg[%d]: %s", i, args[i].c_str());
     }
 
-    int ret = g_Engine->run();
+    int ret = eng->run();
 
-	g_Engine->shutdown();
+	eng->shutdown();
     return ret;
 }

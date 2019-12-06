@@ -3,43 +3,33 @@
 #include <v8pp/convert.hpp>
 #include <v8.h>
 
-#include <r2/config.h>
+#include <r2/managers/memman.h>
 
-#include <string>
 #include <stdarg.h>
 #include <chrono>
 using namespace std;
-
-#ifdef r2_debug
-	#include <rlutilh.h>
-	#define r2Log(...) { rlutil::setColor(rlutil::GREY); r2::r2engine::get()->log("debug", __VA_ARGS__); rlutil::setColor(rlutil::WHITE); }
-
-	#define r2Warn(...) { rlutil::setColor(rlutil::YELLOW); r2::r2engine::get()->log("warning", __VA_ARGS__); rlutil::setColor(rlutil::WHITE); }
-
-	#define r2Error(...) { rlutil::setColor(rlutil::LIGHTRED); r2::r2engine::get()->log("error", __VA_ARGS__); rlutil::setColor(rlutil::WHITE); }
-#endif
 
 namespace r2 {
     class engine;
 	class event;
 	struct log_info {
-		log_info(const string& type, const string& text, f32 time);
+		log_info(const mstring& type, const mstring& text, f32 time);
 		f32 time;
-		string type;
-		string text;
+		mstring type;
+		mstring text;
 	};
     class log_man {
         public:
 			log_man();
 			~log_man();
 
-			void log(const string& type,const string& msg,...);
-			void log(const string& type,const string& msg,va_list ap);
+			void log(const mstring& type,const mstring& msg,...);
+			void log(const mstring& type,const mstring& msg,va_list ap);
 
-			vector<log_info> lines() const { return m_lines; }
+			mvector<log_info> lines() const { return m_lines; }
 
 		protected:
-			vector<log_info> m_lines;
+			mvector<log_info> m_lines;
 			std::chrono::high_resolution_clock::time_point m_start;
     };
 }
@@ -59,8 +49,8 @@ namespace v8pp {
 			r2::log_info result("", "", 0.0f);
 
 			result.time = convert<float>::from_v8(isolate, obj->Get(isolate->GetCurrentContext(), v8str("time")).ToLocalChecked());
-			result.text = convert<string>::from_v8(isolate, obj->Get(isolate->GetCurrentContext(), v8str("text")).ToLocalChecked());
-			result.type = convert<string>::from_v8(isolate, obj->Get(isolate->GetCurrentContext(), v8str("type")).ToLocalChecked());
+			result.text = convert<r2::mstring>::from_v8(isolate, obj->Get(isolate->GetCurrentContext(), v8str("text")).ToLocalChecked());
+			result.type = convert<r2::mstring>::from_v8(isolate, obj->Get(isolate->GetCurrentContext(), v8str("type")).ToLocalChecked());
 
 			return result;
 		}
@@ -70,8 +60,8 @@ namespace v8pp {
 			v8::Local<v8::Object> obj = v8::Object::New(isolate);
 
 			obj->Set(v8str("time"), convert<float>::to_v8(isolate, value.time));
-			obj->Set(v8str("text"), convert<string>::to_v8(isolate, value.text));
-			obj->Set(v8str("type"), convert<string>::to_v8(isolate, value.type));
+			obj->Set(v8str("text"), convert<r2::mstring>::to_v8(isolate, value.text));
+			obj->Set(v8str("type"), convert<r2::mstring>::to_v8(isolate, value.type));
 
 			return scope.Escape(obj);
 		}

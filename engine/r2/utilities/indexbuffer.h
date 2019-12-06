@@ -1,9 +1,4 @@
 #pragma once
-
-#include <vector>
-#include <string>
-using namespace std;
-
 #include <r2/utilities/buffer.h>
 
 namespace r2 {
@@ -17,6 +12,7 @@ namespace r2 {
 
     class index_buffer;
     struct idx_bo_segment : public gpu_buffer_segment {
+		idx_bo_segment() : gpu_buffer_segment(), buffer(nullptr) { }
         index_buffer* buffer;
     };
 

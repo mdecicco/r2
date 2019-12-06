@@ -1,9 +1,7 @@
 #pragma once
 
-#include <vector>
-#include <unordered_map>
-#include <string>
-using namespace std;
+#include <r2/managers/memman.h>
+#include <r2/bindings/v8helpers.h>
 
 #include <r2/utilities/mesh.h>
 #include <r2/utilities/uniformbuffer.h>
@@ -24,9 +22,13 @@ namespace r2 {
 			const idx_bo_segment& indices() const;
 			const ins_bo_segment& instances() const;
 
-			node_material_instance* material;
+			void set_material_instance(node_material_instance* material);
+			node_material_instance* material_instance() const;
 
         protected:
+			friend class scene;
+			uniform_block* m_uniforms;
+			node_material_instance* m_material;
             vtx_bo_segment m_vertexData;
             idx_bo_segment m_indexData;
             ins_bo_segment m_instanceData;
@@ -38,19 +40,19 @@ namespace r2 {
 	class scene;
 	class node_material {
 		public:
-			node_material(const string& shaderBlockName, const uniform_format& fmt);
+			node_material(const mstring& shaderBlockName, uniform_format* fmt);
 			~node_material();
 
 			void set_shader(shader_program* shader);
 			shader_program* shader() const;
-			const uniform_format& format() const;
+			uniform_format* format() const;
 
 			node_material_instance* instantiate(scene* s);
 
-			string name;
+			mstring name;
 		protected:
-			uniform_format m_format;
-			string m_shaderBlockName;
+			uniform_format* m_format;
+			mstring m_shaderBlockName;
 			shader_program* m_shader;
 	};
 
@@ -60,6 +62,7 @@ namespace r2 {
 			
 			node_material* material() const;
 			uniform_block* uniforms() const;
+			void uniforms_v8(v8::Local<v8::String> name, v8::PropertyCallbackInfo<v8::Value> const& info);
 
 		protected:
 			friend class node_material;
@@ -69,55 +72,57 @@ namespace r2 {
 			uniform_block* m_uniforms;
 	};
 
-    class r2engine;
     class scene_man {
         public:
-            scene_man(r2engine* e);
+            scene_man();
             ~scene_man();
 
-            r2engine* engine() const;
-
-            scene* create(const string& name);
-			scene* get(const string& name);
+            scene* create(const mstring& name);
+			scene* get(const mstring& name);
             void destroy(scene* s);
 
         protected:
-            r2engine* m_eng;
-            vector<scene*> m_scenes;
+            mvector<scene*> m_scenes;
     };
 
     class scene {
         public:
             scene_man* manager() const;
-            string name() const;
+			const mstring& name() const;
 
             bool operator==(const scene& rhs) const;
 
             render_node* add_mesh(mesh_construction_data* mesh);
-			uniform_block* allocate_uniform_block(const string& name, const uniform_format& fmt);
+			uniform_block* allocate_uniform_block(const mstring& name, uniform_format* fmt);
+			shader_program* load_shader(const mstring& file, const mstring& assetName);
 
 			void generate_vaos();
 			void sync_buffers();
 			void render();
 
+			void release_resources();
+
         protected:
             friend class scene_man;
-            scene(scene_man* m,const string& name);
+            scene(scene_man* m,const mstring& name);
             ~scene();
             bool check_mesh(size_t vc) const;
 
             scene_man* m_mgr;
-            string m_name;
+            mstring m_name;
+
+			uniform_block* m_sceneUniforms;
 
             // one buffer pool per vertex format
-            unordered_map<string, buffer_pool> m_vtx_buffers;
+            munordered_map<mstring, buffer_pool> m_vtx_buffers;
             // one buffer pool per index type
-			unordered_map<u8, buffer_pool> m_idx_buffers;
+			munordered_map<u8, buffer_pool> m_idx_buffers;
             // one buffer pool per instance data format
-			unordered_map<string, buffer_pool> m_ins_buffers;
+			munordered_map<mstring, buffer_pool> m_ins_buffers;
 			// one buffer pool per uniform block format
-			unordered_map<string, buffer_pool> m_ufm_buffers;
+			munordered_map<mstring, buffer_pool> m_ufm_buffers;
 
-            vector<render_node*> m_nodes;
+            mvector<render_node*> m_nodes;
+			mvector<shader_program*> m_shaders;
     };
 };

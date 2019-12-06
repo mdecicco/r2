@@ -12,62 +12,88 @@ namespace r2 {
 		m_mgr(r2engine::get()->states()),
 		m_updateFrequency(0.0f),
 		isolate(args.GetIsolate()),
-		m_averageUpdateDuration(16) 
+		m_averageUpdateDuration(nullptr),
+		m_name(nullptr),
+		m_engineData(nullptr),
+		m_memory(nullptr),
+		m_scene(nullptr),
+		m_desiredMemorySize(MBtoB(2))
 	{
+		if (!r2engine::get()->renderer()->driver()) {
+			r2Error("No states can be created until after a render driver has been specified");
+			destroy();
+			return;
+		}
+
 		auto global = isolate->GetCurrentContext()->Global();
 
-		if (args.Length() != 1) {
-			r2Error("No name passed to state");
+		if (args.Length() != 2) {
+			r2Error("No name or max memory size passed to state");
 			destroy();
 			return;
 		}
 
 		if (!args[0]->IsString()) {
-			r2Error("State constructor accepts one parameter, and it's the name of the state");
+			r2Error("The first parameter of state constructor should be the name of the state");
 			destroy();
 			return;
 		}
 
-		string name = convert<string>::from_v8(isolate, args[0]);
+		mstring name = convert<mstring>::from_v8(isolate, args[0]);
+		if (name.length() == 0) {
+			r2Error("State names must not be empty.");
+			destroy();
+			return;
+		}
+
 		if (m_mgr->get_state(name)) {
 			r2Error("State \"%s\" has already been registered.", name.c_str());
 			destroy();
 			return;
 		}
-		m_name = name;
 
-		LocalObjectHandle prototype = LocalObjectHandle::Cast(args.This()->GetPrototype());
-
-		Local<Array> instanceProps = args.This()->GetOwnPropertyNames(isolate->GetCurrentContext()).ToLocalChecked();
-		for(int i = 0;i < instanceProps->Length();i++) {
-			LocalValueHandle v = instanceProps->Get(i);
-			string s = r2::var(isolate, v);
-			printf("instanceProps: %s\n", s.c_str());
+		if (!args[1]->IsNumber()) {
+			r2Error("The second parameter of state constructor should be the name of the state");
+			destroy();
+			return;
+		}
+		size_t maxMemSize = convert<size_t>::from_v8(isolate, args[1]);
+		if (maxMemSize == 0) {
+			r2Error("The maximum memory size of a state can not be zero bytes...");
+			destroy();
+			return;
+		}
+		if (maxMemSize > memory_man::global()->size() - memory_man::global()->used()) {
+			r2Error("The specified maximum memory size exceeds the amount of available memory that can be used by anything in the application...\nEither increase the application's memory size via mem.ini or decrease this state's maximum memory size");
+			destroy();
+			return;
 		}
 
-		Local<Array> prototypeProps = prototype->GetOwnPropertyNames(isolate->GetCurrentContext()).ToLocalChecked();
-		for(int i = 0;i < prototypeProps->Length();i++) {
-			LocalValueHandle v = prototypeProps->Get(i);
-			string s = r2::var(isolate, v);
-			printf("prototypeProps: %s\n", s.c_str());
-		}
+		m_memory = new memory_allocator(maxMemSize);
+		activate_allocator();
+		m_name = new mstring(name);
+		deactivate_allocator(true);
     }
 
     state::~state() {
-		r2engine* e = r2engine::get();
-		if (e->states()->current() == this) {
-			r2Warn("State \"%s\" is being unregistered automatically as a result of the deletion of the state", m_name.c_str());
-			e->states()->unregister_state(this);
-		}
 		destroy();
+		delete m_memory;
     }
 
 	void state::init() {
+		activate_allocator();
+		m_engineData = new mvector<engine_state_data*>();
+		m_mgr->initialize_state_engine_data(this);
+
+		m_averageUpdateDuration = new average(16);
+		m_scene = r2engine::get()->scenes()->create((*m_name) + "_scene");
+
 		LocalObjectHandle self = convert<state*>::to_v8(isolate, this);
 
 		LocalValueHandle value = self->Get(v8str("willBecomeActive"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
 			r2Error("State has a global \"state\" variable with a \"willBecomeActive\" property that is not a function.");
+			deactivate_allocator(true);
 			destroy();
 			return;
 		} else if (!value->IsUndefined()) m_willBecomeActive.Reset(isolate, LocalFunctionHandle::Cast(value));
@@ -75,6 +101,7 @@ namespace r2 {
 		value = self->Get(v8str("becameActive"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
 			r2Error("State has a global \"state\" variable with a \"becameActive\" property that is not a function.");
+			deactivate_allocator(true);
 			destroy();
 			return;
 		} else if (!value->IsUndefined()) m_becameActive.Reset(isolate, LocalFunctionHandle::Cast(value));
@@ -82,6 +109,7 @@ namespace r2 {
 		value = self->Get(v8str("willBecomeInactive"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
 			r2Error("State has a global \"state\" variable with a \"willBecomeInactive\" property that is not a function.");
+			deactivate_allocator(true);
 			destroy();
 			return;
 		} else if (!value->IsUndefined()) m_willBecomeInactive.Reset(isolate, LocalFunctionHandle::Cast(value));
@@ -89,6 +117,7 @@ namespace r2 {
 		value = self->Get(v8str("becameInactive"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
 			r2Error("State has a global \"state\" variable with a \"becameInactive\" property that is not a function.");
+			deactivate_allocator(true);
 			destroy();
 			return;
 		} else if (!value->IsUndefined()) m_becameInactive.Reset(isolate, LocalFunctionHandle::Cast(value));
@@ -96,6 +125,7 @@ namespace r2 {
 		value = self->Get(v8str("willBeDestroyed"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
 			r2Error("State has a global \"state\" variable with a \"willBeDestroyed\" property that is not a function.");
+			deactivate_allocator(true);
 			destroy();
 			return;
 		} else if (!value->IsUndefined()) m_willBeDestroyed.Reset(isolate, LocalFunctionHandle::Cast(value));
@@ -103,6 +133,7 @@ namespace r2 {
 		value = self->Get(v8str("update"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
 			r2Error("State has a global \"state\" variable with a \"update\" property that is not a function.");
+			deactivate_allocator(true);
 			destroy();
 			return;
 		} else if (!value->IsUndefined()) m_update.Reset(isolate, LocalFunctionHandle::Cast(value));
@@ -110,6 +141,7 @@ namespace r2 {
 		value = self->Get(v8str("render"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
 			r2Error("State has a global \"state\" variable with a \"render\" property that is not a function.");
+			deactivate_allocator(true);
 			destroy();
 			return;
 		} else if (!value->IsUndefined()) m_render.Reset(isolate, LocalFunctionHandle::Cast(value));
@@ -117,15 +149,19 @@ namespace r2 {
 		value = self->Get(v8str("handleEvent"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
 			r2Error("State has a global \"state\" variable with a \"handleEvent\" property that is not a function.");
+			deactivate_allocator(true);
 			destroy();
 			return;
 		} else if (!value->IsUndefined()) m_handleEvent.Reset(isolate, LocalFunctionHandle::Cast(value));
 
 		m_scriptState.Reset(isolate, LocalValueHandle::Cast(self));
+		deactivate_allocator(true);
 	}
 
 	void state::destroy() {
 		willBeDestroyed();
+
+		activate_allocator();
 
 		if (!m_scriptState.IsEmpty()) {
 			if (!m_willBecomeActive.IsEmpty()) m_willBecomeActive.Reset();
@@ -135,31 +171,52 @@ namespace r2 {
 			if (!m_willBeDestroyed.IsEmpty()) m_willBeDestroyed.Reset();
 			m_scriptState.Reset();
 		}
+
+		if(m_scene) {
+			r2engine::get()->scenes()->destroy(m_scene);
+			m_scene = nullptr;
+		}
+
+		if (m_engineData) {
+			for(auto data : *m_engineData) {
+				delete data;
+			}
+			delete m_engineData;
+			m_engineData = nullptr;
+		}
+		if (m_averageUpdateDuration) { delete m_averageUpdateDuration; m_averageUpdateDuration = nullptr; }
+		if (m_name) { delete m_name; m_name = nullptr; }
+		deactivate_allocator(true);
 	}
 
     state_man* state::manager() const {
         return m_mgr;
     }
 
-    void state::set_name(const string &name) {
-        if(m_name.length() != 0) {
-            if(m_mgr) r2Warn("Call to state::set_name failed. Attempted to rename state %s to %s",m_name.c_str(),name.c_str());
-            return;
-        }
-        m_name = name;
-    }
+	scene* state::getScene() const {
+		return m_scene;
+	}
 
-    string state::name() const {
-        return m_name;
+    mstring state::name() const {
+        return *m_name;
     }
 
     bool state::operator==(const state& rhs) const {
         return m_name == rhs.m_name;
     }
 
+	engine_state_data* state::get_engine_state_data(u16 factoryIdx) {
+		if (m_engineData->size() == 0) return nullptr;
+		return (*m_engineData)[factoryIdx];
+	}
+
 	void state::willBecomeActive() {
+		activate_allocator();
 		if (m_scriptState.IsEmpty()) init();
-		if (!m_willBecomeActive.IsEmpty()) m_willBecomeActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+		if (!m_willBecomeActive.IsEmpty()) {
+			m_willBecomeActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+		}
+		deactivate_allocator(true);
 	}
 
 	void state::becameActive() {
@@ -167,46 +224,94 @@ namespace r2 {
 		m_updateTmr.start();
 		m_dt.reset();
 		m_dt.start();
-		if (!m_becameActive.IsEmpty()) m_becameActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+		if (!m_becameActive.IsEmpty()) {
+			activate_allocator();
+			m_becameActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+			deactivate_allocator(true);
+		}
 	}
 
 	void state::willBecomeInactive() {
-		if (!m_willBecomeInactive.IsEmpty()) m_willBecomeInactive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+		if (!m_willBecomeInactive.IsEmpty()) {
+			activate_allocator();
+			m_willBecomeInactive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+			deactivate_allocator(true);
+		}
 	}
 
 	void state::becameInactive() {
-		if (!m_becameInactive.IsEmpty()) m_becameInactive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+		if (!m_becameInactive.IsEmpty()) {
+			activate_allocator();
+			m_becameInactive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+			deactivate_allocator(true);
+		}
 	}
 
 	void state::willBeDestroyed() {
-		if (!m_willBeDestroyed.IsEmpty()) m_willBeDestroyed.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+		if (!m_willBeDestroyed.IsEmpty()) {
+			activate_allocator();
+			m_willBeDestroyed.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+			deactivate_allocator(true);
+		}
 	}
 
 	void state::update() {
 		if (!shouldUpdate()) return;
 		if (!m_update.IsEmpty()) {
+			activate_allocator();
 			f32 dt = m_dt;
 			m_dt.reset();
 			m_dt.start();
 			Local<Value> arg = to_v8(isolate, dt);
 			m_update.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 1, &arg);
-			m_averageUpdateDuration += (f32)m_dt;
+			(*m_averageUpdateDuration) += (f32)m_dt;
+			deactivate_allocator(true);
 		}
 	}
 
 	void state::render() {
-		if (!m_render.IsEmpty()) m_render.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+		if (!m_render.IsEmpty()) {
+			activate_allocator();
+			m_render.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+			deactivate_allocator(true);
+		}
 	}
 
 	void state::handle(event* evt) {
 		if (!m_handleEvent.IsEmpty()) {
+			activate_allocator();
 			auto param = Local<Value>::Cast(convert<event>::to_v8(isolate, *evt));
 			m_handleEvent.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 1, &param);
+			deactivate_allocator(true);
 		}
 	}
 
 	f32 state::getAverageUpdateDuration() const {
-		return m_averageUpdateDuration;
+		return *m_averageUpdateDuration;
+	}
+
+	void state::releaseResources() {
+		memory_man::push_current(memory_man::global());
+		mstring name = mstring(m_name->c_str());
+		memory_man::pop_current();
+
+		destroy();
+
+		m_memory->deallocate_all();
+
+		reset_state_object_storage();
+
+		m_name = new mstring(name.c_str());
+
+		init();
+	}
+
+	size_t state::getMaxMemorySize() const {
+		return m_memory->size();
+	}
+
+	size_t state::getUsedMemorySize() const {
+		return m_memory->used();
 	}
 
 	bool state::shouldUpdate() {
@@ -226,7 +331,7 @@ namespace r2 {
 				bool warnCondition0 = m_timeSinceBelowFrequencyStarted.elapsed() > warnAfterBelowForInterval;
 				bool warnCondition1 = m_timeSinceBelowFrequencyLogged.elapsed() > warnLogInterval || m_timeSinceBelowFrequencyLogged.stopped();
 				if (warnCondition0 && warnCondition1) {
-					r2Warn("State \"%s\" has been updating at %0.2f%% less than the desired frequency (%0.2f Hz) for more than %0.2f seconds", m_name.c_str(), warnDiffFrac * 100.0f, m_updateFrequency, warnAfterBelowForInterval);
+					r2Warn("State \"%s\" has been updating at %0.2f%% less than the desired frequency (%0.2f Hz) for more than %0.2f seconds", m_name->c_str(), warnDiffFrac * 100.0f, m_updateFrequency, warnAfterBelowForInterval);
 					if (m_timeSinceBelowFrequencyLogged.stopped()) m_timeSinceBelowFrequencyLogged.start();
 					else {
 						m_timeSinceBelowFrequencyLogged.reset();
@@ -245,11 +350,19 @@ namespace r2 {
 		return false;
 	}
 
+	void state::activate_allocator() {
+		memory_man::push_current(m_memory);
+		__set_temp_engine_state_ref(this);
+	}
+
+	void state::deactivate_allocator(bool unsetEngineStateRef) {
+		memory_man::pop_current();
+		if (unsetEngineStateRef) __set_temp_engine_state_ref(nullptr);
+	}
 
 
 
-    state_man::state_man(r2engine* e) {
-        m_eng = e;
+    state_man::state_man() {
 		m_active = 0;
         r2Log("State manager initialized");
     }
@@ -258,21 +371,17 @@ namespace r2 {
         r2Log("State manager destroyed");
     }
 
-    r2engine* state_man::engine() const {
-        return m_eng;
-    }
-
 	bool state_man::register_state(state *s) {
 		if(!s) r2Error("Call to state_man::register_state failed. Null pointer provided");
 
 		for(auto i = m_states.begin();i != m_states.end();i++) {
 			if((**i) == *s) {
-				r2Error("Call to state_man::register_state failed. A state with the name \"%s\" already exists", s->m_name.c_str());
+				r2Error("Call to state_man::register_state failed. A state with the name \"%s\" already exists", s->m_name->c_str());
 				return false;
 			}
 		}
 
-		r2Log("State \"%s\" registered", s->m_name.c_str());
+		r2Log("State \"%s\" registered", s->m_name->c_str());
 		m_states.push_back(s);
 		return true;
 	}
@@ -284,9 +393,9 @@ namespace r2 {
 		for(auto i = m_states.begin();i != m_states.end();i++) {
 			if((*i) == s) {
 				if (m_active == s) {
-					r2Warn("Unregistering currently active state \"%s\" may result in the engine becoming stateless", s->m_name.c_str());
+					r2Warn("Unregistering currently active state \"%s\" may result in the engine becoming stateless", s->m_name->c_str());
 					m_active->willBecomeInactive();
-					m_eng->remove_child(m_active);
+					r2engine::get()->remove_child(m_active);
 					m_active = 0;
 					s->becameInactive();
 				}
@@ -297,23 +406,31 @@ namespace r2 {
 		}
 
 		if (!found) {
-			r2Error("Call to state_man::unregister_state failed. A state with the name \"%s\" doesn't exist", s->m_name.c_str());
+			r2Error("Call to state_man::unregister_state failed. A state with the name \"%s\" doesn't exist", s->m_name->c_str());
 			return false;
 		}
 
-		r2Log("State \"%s\" unregistered", s->m_name.c_str());
+		r2Log("State \"%s\" unregistered", s->m_name->c_str());
 		return true;
 	}
 
-	state* state_man::get_state(const string& name) const {
+	state* state_man::get_state(const mstring& name) const {
 		for(state* s : m_states) {
-			if (s->m_name == name) return s;
+			if ((*s->m_name) == name) return s;
 		}
 
 		return NULL;
 	}
 
-	void state_man::activate(const string& name) {
+	void state_man::initialize_state_engine_data(state* s) {
+		for(auto factory : m_engineStateDataFactories) {
+			engine_state_data* data = factory->create();
+			data->m_state = s;
+			s->m_engineData->push_back(data);
+		}
+	}
+
+	void state_man::activate(const mstring& name) {
 		state* newState = get_state(name);
 		if (!newState) {
 			r2Error("A state with the name \"%s\" has not been registered", name.c_str());
@@ -323,13 +440,39 @@ namespace r2 {
 		if (m_active) {
 			state* old = m_active;
 			m_active->willBecomeInactive();
-			m_eng->remove_child(m_active);
+			r2engine::get()->remove_child(m_active);
 			old->becameInactive();
+			old->releaseResources();
 		}
 		
 		newState->willBecomeActive();
 		m_active = newState;
-		m_eng->add_child(m_active);
+		r2engine::get()->add_child(m_active);
 		m_active->becameActive();
 	}
+
+	void state_man::clearActive() {
+		if (m_active) {
+			m_active->willBecomeInactive();
+			r2engine::get()->remove_child(m_active);
+			m_active->becameInactive();
+			m_active = nullptr;
+		}
+	}
+
+	void state_man::destroyStates() {
+		for(auto state : m_states) {
+			delete state;
+		}
+		m_states.clear();
+	}
+};
+
+r2::state* v8pp::factory<r2::state, v8pp::raw_ptr_traits>::create(v8::Isolate* i, const v8::FunctionCallbackInfo<v8::Value>& args) {
+	r2::state* s = new r2::state(args);
+	return s;
+}
+
+void v8pp::factory<r2::state, v8pp::raw_ptr_traits>::destroy(v8::Isolate* i, r2::state* s) {
+	// leave deallocating to the engine
 }

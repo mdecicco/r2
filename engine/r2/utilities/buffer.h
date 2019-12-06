@@ -1,6 +1,6 @@
 #pragma once
-#include <list>
-#include <vector>
+
+#include <r2/managers/memman.h>
 #include <stddef.h>
 
 namespace r2 {
@@ -30,7 +30,7 @@ namespace r2 {
             size_t id() const;
 
 			bool has_updates() const;
-			const std::list<changed_buffer_segment>& updates() const;
+			const mlist<changed_buffer_segment>& updates() const;
 			void clear_updates();
 
 			size_t used_size() const;
@@ -43,7 +43,7 @@ namespace r2 {
             size_t m_id;
 			size_t m_size;
 			size_t m_used;
-			std::list<changed_buffer_segment> m_updates;
+			mlist<changed_buffer_segment> m_updates;
     };
 
 	class render_driver;
@@ -54,6 +54,7 @@ namespace r2 {
 			~buffer_pool();
 
 			void sync_buffers(render_driver* driver);
+			void free_buffers(render_driver* driver);
 
 			template<typename T, typename ... construction_args>
 			T* find_buffer(size_t bytesNeeded, construction_args ... args) {
@@ -67,7 +68,7 @@ namespace r2 {
 				return (T*)buf;
 			}
 
-		protected:
-			std::vector<gpu_buffer*> m_buffers;
+		//protected:
+			mvector<gpu_buffer*> m_buffers;
 	}; 
 }

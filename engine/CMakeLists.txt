@@ -7,6 +7,8 @@ file(GLOB_RECURSE r2_src
     "r2/managers/*.cpp"
     "r2/managers/drivers/gl/*.h"
     "r2/managers/drivers/gl/*.cpp"
+    "r2/systems/*.h"
+    "r2/systems/*.cpp"
     "r2/utilities/*.h"
     "r2/utilities/*.hpp"
     "r2/utilities/*.cpp"

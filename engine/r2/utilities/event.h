@@ -1,15 +1,10 @@
 #pragma once
 #include <r2/bindings/bindings.h>
+#include <r2/managers/memman.h>
 
-#include <v8.h>
-#include <v8pp/convert.hpp>
-#include <v8pp/class.hpp>
+#include <r2/bindings/v8helpers.h>
 
-#include <string>
-#include <vector>
-using namespace std;
-
-#define evt(eng,name,...) event(__FILE__, __LINE__, eng, name, ##__VA_ARGS__)
+#define evt(name,...) event(__FILE__, __LINE__, name, ##__VA_ARGS__)
 
 namespace r2 {
     class data_container;
@@ -23,53 +18,58 @@ namespace r2 {
                     line = 0;
                 }
                 ~_caller() { }
-                string file;
+                mstring file;
                 int line;
             } caller;
 
-            event(const string& file, const int line, const string& name, bool has_data = false, bool recursive = true);
+            event(const mstring& file, const int line, const mstring& name, bool has_data = false, bool recursive = true);
+			event(const event& o);
 			event(v8Args args);
             ~event();
 
             caller emitted_at() const;
             bool is_recursive() const;
-            string name() const;
+            mstring name() const;
             data_container* data() const;
+			bool is_internal_only() const { return m_internalOnly; }
 
             void stop_propagating() { m_recurse = false; }
 
-			void set_v8_local(void* local) { m_v8local = local; }
-			void* v8_local() { return m_v8local; }
-
 			void set_script_data_from_cpp(const var& v);
 			void set_script_data(v8Args args);
-			v8::Local<v8::Value> get_script_data() const;
+			v8::Local<v8::Value> get_script_data();
 
         protected:
             caller m_caller;
             data_container* m_data;
 			var m_scriptData;
-            string m_name;
+            mstring m_name;
             bool m_recurse;
-			void* m_v8local;
+			bool m_internalOnly;
     };
 
     class event_receiver {
         public:
-            event_receiver();
+            event_receiver(memory_allocator* memory = nullptr);
             virtual ~event_receiver();
 
             void add_child(event_receiver* child);
             void remove_child(event_receiver* child);
 
-            // try not to call this directly
-            virtual void handle(event* evt) = 0;
+			void frame_started();
 
-            // call this instead
             void dispatch(event* evt);
+			void dispatchAtFrameStart(event* evt);
 
-        protected:
-            vector<event_receiver*> m_children;
+			// Don't call this directly
+			virtual void handle(event* evt) = 0;
+
+        private:
+			bool m_isAtFrameStart;
+			memory_allocator* m_memory;
+			mvector<event*> m_frameStartEvents;
+			mvector<event*> m_nextFrameStartEvents;
+            mvector<event_receiver*> m_children;
     };
 }
 
@@ -90,7 +90,7 @@ namespace v8pp {
 			if (!is_valid(isolate, value)) {
 				throw invalid_argument(isolate, value, "Object");
 			}
-			r2::event* object = class_<r2::event, raw_ptr_traits>::unwrap_object(isolate, value);
+			r2::event* object = class_<r2::event, v8pp::raw_ptr_traits>::unwrap_object(isolate, value);
 			if (object) {
 				return *object;
 			}
@@ -101,8 +101,8 @@ namespace v8pp {
 			v8::EscapableHandleScope scope(isolate);
 			v8::Local<v8::Object> obj = v8::Object::New(isolate);
 
-			obj->Set(v8str("name"), convert<string>::to_v8(isolate, value.name()));
-			obj->Set(v8str("data"), value.get_script_data());
+			obj->Set(v8str("name"), convert<r2::mstring>::to_v8(isolate, value.name()));
+			obj->Set(v8str("data"), const_cast<r2::event&>(value).get_script_data());
 
 			return scope.Escape(obj);
 		}

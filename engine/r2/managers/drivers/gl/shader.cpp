@@ -56,14 +56,14 @@ namespace r2 {
 	}
 
 	bool gl_shader_program::deserialize(const unsigned char* data, size_t length) {
-		string contents;
+		mstring contents;
 		contents.resize(length);
 		memcpy(&contents[0], data, length);
 
 		u32 vIdx = 0;
 		u32 fIdx = contents.find("// fragment");
-		string vert = contents.substr(0, fIdx);
-		string frag = contents.substr(fIdx);
+		mstring vert = contents.substr(0, fIdx);
+		mstring frag = contents.substr(fIdx);
 
 		m_program = create_program(vert.c_str(), frag.c_str());
 		return m_program > 0;
@@ -86,19 +86,24 @@ namespace r2 {
 	}
 
 	const gl_shader_program::uniform_block_info& gl_shader_program::block_info(uniform_block* uniforms) {
-		const string& name = uniforms->name();
+		const mstring& name = uniforms->name();
 		if (m_uniformBlocks.count(name) == 0) {
 			u32 idx = 0;
 			glCall(idx = glGetUniformBlockIndex(m_program, name.c_str()));
-			if (idx == GL_INVALID_INDEX) r2Error("Failed to find uniform block \"%s\" in shader.", name.c_str());
-			u32 bindingIdx = m_uniformBlocks.size();
-			m_uniformBlocks[name] = { idx, bindingIdx };
+			if (idx == GL_INVALID_INDEX) {
+				// r2Error("Failed to find uniform block \"%s\" in shader.", name.c_str());
+				m_uniformBlocks[name] = { GL_INVALID_INDEX, GL_INVALID_INDEX };
+			} else {
+				u32 bindingIdx = m_uniformBlocks.size();
+				glCall(glUniformBlockBinding(m_program, idx, bindingIdx));
+				m_uniformBlocks[name] = { idx, bindingIdx };
+			}
 		}
 
 		return m_uniformBlocks[name];
 	}
 
-	u32 gl_shader_program::get_uniform_location(const string& name) {
+	u32 gl_shader_program::get_uniform_location(const mstring& name) {
 		u32 loc = 0;
 		glCall(loc = glGetUniformLocation(m_program, name.c_str()));
 		return loc;

@@ -32,7 +32,8 @@ struct class_info
 
 	class_info(type_info const& type, type_info const& traits);
 
-	virtual ~class_info() = default; // make virtual to delete derived object_registry
+	// modified to /not/ delete derived object_registry
+	~class_info() { }; // make virtual to delete derived object_registry
 
 	std::string class_name() const;
 };
@@ -57,7 +58,7 @@ public:
 	object_registry& operator=(object_registry const&) = delete;
 	object_registry& operator=(object_registry &&) = delete;
 
-	~object_registry();
+	~object_registry() = delete;
 
 	v8::Isolate* isolate() { return isolate_; }
 
@@ -82,6 +83,12 @@ public:
 
 	void remove_object(object_id const& obj);
 	void remove_objects();
+	void reset_objects_map() {
+		// this is only called by r2, don't delete objects_ first.
+		// it will already be deallocated by the time this is called
+		// by r2's memory manager
+		objects_ = new std::unordered_map<pointer_type, wrapped_object>();
+	}
 
 	pointer_type find_object(object_id id, type_info const& type) const;
 	v8::Local<v8::Object> find_v8_object(pointer_type const& ptr) const;
@@ -113,7 +120,7 @@ private:
 
 	std::vector<base_class_info> bases_;
 	std::vector<object_registry*> derivatives_;
-	std::unordered_map<pointer_type, wrapped_object> objects_;
+	std::unordered_map<pointer_type, wrapped_object>* objects_;
 
 	v8::Isolate* isolate_;
 	v8::Global<v8::FunctionTemplate> func_;

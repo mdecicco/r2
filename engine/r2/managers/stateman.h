@@ -1,13 +1,13 @@
 #pragma once
 
 #include <r2/managers/scriptman.h>
+#include <r2/managers/memman.h>
+#include <r2/managers/engine_state.h>
 #include <r2/utilities/event.h>
 #include <r2/utilities/timer.h>
 #include <r2/utilities/average.h>
-
-#include <string>
-#include <vector>
-#include <v8pp/factory.hpp>
+#include <r2/managers/engine_state.h>
+#include <r2/bindings/v8helpers.h>
 using namespace std;
 
 typedef v8::Handle<v8::Value> LocalValueHandle;
@@ -21,6 +21,7 @@ namespace r2 {
     class r2engine;
     class state_man;
     class asset;
+	class scene;
 
     class state : public event_receiver {
         public:
@@ -31,11 +32,11 @@ namespace r2 {
 			void destroy();
 
             state_man* manager() const;
-            void set_name(const string& name);
-            string name() const;
+			scene* getScene() const;
+            mstring name() const;
             bool operator==(const state& rhs) const;
 
-			//script_env* environment() { return &m_env; }
+			engine_state_data* get_engine_state_data(u16 factoryIdx);
 
 			void willBecomeActive();
 			void becameActive();
@@ -48,10 +49,18 @@ namespace r2 {
 
 			void setUpdateFrequency(f32 freq) { m_updateFrequency = freq; }
 			f32 getAverageUpdateDuration() const;
+			void releaseResources();
+			size_t getMaxMemorySize() const;
+			size_t getUsedMemorySize() const;
 			bool shouldUpdate();
+
+			void activate_allocator();
+			void deactivate_allocator(bool unsetEngineStateRef = false);
 
         protected:
             friend class state_man;
+			mvector<engine_state_data*>* m_engineData;
+
             state_man* m_mgr;
 			v8::Isolate* isolate;
 			PersistentValueHandle m_scriptState;
@@ -64,46 +73,55 @@ namespace r2 {
 			PersistentFunctionHandle m_render;
 			PersistentFunctionHandle m_handleEvent;
 
+			memory_allocator* m_memory;
+			size_t m_desiredMemorySize;
+			scene* m_scene;
+
+			bool m_releaseResourcesOnDeactivate;
 			f32 m_updateFrequency;
-			average m_averageUpdateDuration;
+			average* m_averageUpdateDuration;
 			timer m_updateTmr;
 			timer m_dt;
 			timer m_timeSinceBelowFrequencyStarted;
 			timer m_timeSinceBelowFrequencyLogged;
-            string m_name;
+            mstring* m_name;
     };
 
     class state_man {
         public:
-            state_man(r2engine* e);
+            state_man();
             ~state_man();
-
-            r2engine* engine() const;
 
             bool register_state(state* s);
 			bool unregister_state(state* s);
 
-            state* get_state(const string& name) const;
+            state* get_state(const mstring& name) const;
 			state* current() { return m_active; }
 
-			void activate(const string& name);
+			template <typename T>
+			engine_state_data_ref<T> register_state_data_factory(engine_state_data_factory* factory) {
+				engine_state_data_ref<T> ref(m_engineStateDataFactories.size());
+				m_engineStateDataFactories.push_back(factory);
+				return ref;
+			}
+			void initialize_state_engine_data(state* s);
+
+			void activate(const mstring& name);
+			void clearActive();
+			void destroyStates();
 
         protected:
-            r2engine* m_eng;
-            vector<state*> m_states;
+			friend class state;
+			friend class r2engine;
+            mvector<state*> m_states;
+			mvector<engine_state_data_factory*> m_engineStateDataFactories;
 			state* m_active;
     };
 };
 
 template <>
 struct v8pp::factory<r2::state, v8pp::raw_ptr_traits> {
-	static r2::state* create(v8::Isolate* i, const v8::FunctionCallbackInfo<v8::Value>& args) {
-		r2::state* s = new r2::state(args);
-		//s->init();
-		return s;
-	}
+	static r2::state* create(v8::Isolate* i, const v8::FunctionCallbackInfo<v8::Value>& args);
 
-	static void destroy(v8::Isolate* i, r2::state* s) {
-		delete s;
-	}
+	static void destroy(v8::Isolate* i, r2::state* s);
 };

@@ -20,38 +20,46 @@ namespace r2 {
 
 		return nullptr;
 	}
+
 	void printGlError(const char* funcName) {
 		const char* err = glError();
 		if (err) {
 			r2Error("%s: %s", funcName, err);
 		}
+		/*
+		else {
+			r2Log("%s", funcName);
+		}
+		*/
 	}
 
-	const int attr_component_counts[] = { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 9, 9, 9, 16, 16, 16 };
+	const int attr_component_counts[] = { 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 3, 3, 3, 4, 4, 4 };
 	const GLenum attr_component_types[] = {
 		GL_INT,
 		GL_FLOAT,
-		GL_BYTE,
+		GL_UNSIGNED_INT,
 		GL_INT,
 		GL_FLOAT,
-		GL_BYTE,
+		GL_UNSIGNED_INT,
 		GL_INT,
 		GL_FLOAT,
-		GL_BYTE,
+		GL_UNSIGNED_INT,
 		GL_INT,
 		GL_FLOAT,
-		GL_BYTE,
+		GL_UNSIGNED_INT,
 		GL_INT,
 		GL_FLOAT,
-		GL_BYTE,
+		GL_UNSIGNED_INT,
 		GL_INT,
 		GL_FLOAT,
-		GL_BYTE,
+		GL_UNSIGNED_INT,
 		GL_INT,
 		GL_FLOAT,
-		GL_BYTE,
+		GL_UNSIGNED_INT,
 	};
 	const GLenum index_component_types[] = { 0, GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT, 0, GL_UNSIGNED_INT };
+	
+	
 	gl_render_driver::gl_render_driver(render_man* m) : render_driver(m) {
 		assert(sizeof(GLint) == sizeof(i32));
 		assert(sizeof(GLuint) == sizeof(u32));
@@ -66,17 +74,29 @@ namespace r2 {
 		assert(sizeof(mat2f) == sizeof(f32) * 4);
 		assert(sizeof(mat3f) == sizeof(f32) * 9);
 		assert(sizeof(mat4f) == sizeof(f32) * 16);
+
+		glDepthFunc(GL_LESS);
+		glEnable(GL_DEPTH_TEST);
 	}
 	
 	gl_render_driver::~gl_render_driver() {
 	}
 
+	shader_program* gl_render_driver::load_shader(const mstring& file, const mstring& assetName) {
+		gl_shader_program* shader = r2engine::get()->assets()->create<gl_shader_program>(assetName);
+		if (!shader->load(file)) {
+			r2engine::get()->assets()->destroy(shader);
+			return nullptr;
+		}
+		return shader;
+	}
+	
 	void gl_render_driver::generate_vao(r2::render_node* node) {
-		const vertex_format& vfmt = node->vertices().buffer->format();
+		const vertex_format* vfmt = node->vertices().buffer->format();
 		const instance_format* ifmt = nullptr;
-		if (node->instances().is_valid()) ifmt = &node->instances().buffer->format();
+		if (node->instances().is_valid()) ifmt = node->instances().buffer->format();
 
-		string hashStr = vfmt.hash_name();
+		mstring hashStr = vfmt->hash_name();
 		if (ifmt) hashStr += "," + ifmt->hash_name();
 
 		if (m_vaos.count(hashStr) > 0) return;
@@ -85,42 +105,96 @@ namespace r2 {
 		glCall(glGenVertexArrays(1, &vao));
 		glCall(glBindVertexArray(vao));
 
-		auto attribs = vfmt.attributes();
+		auto attribs = vfmt->attributes();
 		u16 location = 0;
 		for (vertex_attribute_type t : attribs) {
+			GLenum type = attr_component_types[t];
+
 			glCall(glEnableVertexAttribArray(location));
-			glCall(glVertexAttribFormat(location, attr_component_counts[t], attr_component_types[t], GL_FALSE, vfmt.offsetOf(location)));
+			if (type == GL_FLOAT) {
+				glCall(glVertexAttribFormat(location, attr_component_counts[t], type, GL_FALSE, vfmt->offsetOf(location)));
+			} else {
+				glCall(glVertexAttribIFormat(location, attr_component_counts[t], type, vfmt->offsetOf(location)));
+			}
 			glCall(glVertexAttribBinding(location, 0));
+
 			location++;
 		}
 
 		if (ifmt) {
 			auto iattribs = ifmt->attributes();
 			u16 ilocation = 0;
+			u16 attribIdx = 0;
 			for (instance_attribute_type t : iattribs) {
-				glCall(glEnableVertexAttribArray(location + ilocation));
 				GLenum type = attr_component_types[t];
-				if (type == GL_FLOAT) {
-					glCall(glVertexAttribFormat(location + ilocation, attr_component_counts[t], type, GL_FALSE, ifmt->offsetOf(ilocation)));
+				size_t offset = ifmt->offsetOf(attribIdx);
+
+				if (t == iat_mat4f || t == iat_mat4i || t == iat_mat4ui) {
+					for (u8 c = 0; c < 4; c++) {
+						glCall(glEnableVertexAttribArray(location + ilocation));
+						if (type == GL_FLOAT) {
+							glCall(glVertexAttribFormat(location + ilocation, attr_component_counts[t], type, GL_FALSE, offset + (c * 16)));
+						} else {
+							glCall(glVertexAttribIFormat(location + ilocation, attr_component_counts[t], type, offset + (c * 16)));
+						}
+						glCall(glVertexAttribBinding(location + ilocation, 1));
+
+						ilocation++;
+					}
+				} else if (t == iat_mat3f || t == iat_mat3i || t == iat_mat3ui) {
+					for (u8 c = 0; c < 3; c++) {
+						glCall(glEnableVertexAttribArray(location + ilocation));
+						if (type == GL_FLOAT) {
+							glCall(glVertexAttribFormat(location + ilocation, attr_component_counts[t], type, GL_FALSE, offset + (c * 12)));
+						} else {
+							glCall(glVertexAttribIFormat(location + ilocation, attr_component_counts[t], type, offset + (c * 12)));
+						}
+						glCall(glVertexAttribBinding(location + ilocation, 1));
+
+						ilocation++;
+					}
 				} else {
-					glCall(glVertexAttribIFormat(location + ilocation, attr_component_counts[t], type, ifmt->offsetOf(ilocation)));
+					glCall(glEnableVertexAttribArray(location + ilocation));
+					if (type == GL_FLOAT) {
+						glCall(glVertexAttribFormat(location + ilocation, attr_component_counts[t], type, GL_FALSE, offset));
+					} else {
+						glCall(glVertexAttribIFormat(location + ilocation, attr_component_counts[t], type, offset));
+					}
+					glCall(glVertexAttribBinding(location + ilocation, 1));
+
+					ilocation++;
 				}
-				glCall(glVertexAttribBinding(location + ilocation, 1));
-				ilocation++;
+
+				attribIdx++;
 			}
 			glCall(glVertexBindingDivisor(1, 1));
 		}
+
 		glCall(glBindVertexArray(0));
 
 		m_vaos[hashStr] = vao;
 	}
 
-	void gl_render_driver::bind_vao(r2::render_node* node) {
-		const vertex_format& vfmt = node->vertices().buffer->format();
+	void gl_render_driver::free_vao(r2::render_node* node) {
+		const vertex_format* vfmt = node->vertices().buffer->format();
 		const instance_format* ifmt = nullptr;
-		if (node->instances().is_valid()) ifmt = &node->instances().buffer->format();
+		if (node->instances().is_valid()) ifmt = node->instances().buffer->format();
 
-		string hashStr = vfmt.hash_name();
+		mstring hashStr = vfmt->hash_name();
+		if (ifmt) hashStr += "," + ifmt->hash_name();
+
+		if (m_vaos.count(hashStr) == 0) return;
+		GLuint vao = m_vaos[hashStr];
+		glCall(glDeleteVertexArrays(1, &vao));
+		m_vaos.erase(hashStr);
+	}
+
+	void gl_render_driver::bind_vao(r2::render_node* node) {
+		const vertex_format* vfmt = node->vertices().buffer->format();
+		const instance_format* ifmt = nullptr;
+		if (node->instances().is_valid()) ifmt = node->instances().buffer->format();
+
+		mstring hashStr = vfmt->hash_name();
 		if (ifmt) hashStr += "," + ifmt->hash_name();
 
 		if (m_vaos.count(hashStr) == 0) generate_vao(node);
@@ -155,7 +229,7 @@ namespace r2 {
 
 	void gl_render_driver::free_buffer(gpu_buffer* buf) {
 		if (m_buffers.count(buf->id()) == 0) {
-			r2Warn("Buffer 0x%X was never synced, yet render_driver::free_buffer was called on it. Ignoring.", buf);
+			r2Warn("Buffer %d was never synced, yet render_driver::free_buffer was called on it. Ignoring.", buf->id());
 			return;
 		}
 
@@ -166,10 +240,9 @@ namespace r2 {
 	void gl_render_driver::bind_uniform_block(shader_program* _shader, uniform_block* uniforms) {
 		gl_shader_program* shader = ((gl_shader_program*)_shader);
 		auto blockInfo = shader->block_info(uniforms);
+		if (blockInfo.loc == GL_INVALID_INDEX) return;
 		auto bufferInfo = uniforms->buffer_info();
 		GLuint buffer = m_buffers[bufferInfo.buffer->id()];
-
-		glCall(glUniformBlockBinding(shader->m_program, blockInfo.loc, blockInfo.bindIndex));
 		glCall(glBindBufferRange(GL_UNIFORM_BUFFER, blockInfo.bindIndex, buffer, bufferInfo.memBegin, bufferInfo.memsize()));
 	}
 
@@ -243,17 +316,25 @@ namespace r2 {
 		}
 	}
 
-	void gl_render_driver::render_node(r2::render_node* node) {
-		if (!node->material) return;
+	size_t gl_render_driver::get_uniform_buffer_block_offset_alignment() const {
+		GLint alignment = 0;
+		glCall(glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &alignment));
+		return alignment;
+	}
+
+	void gl_render_driver::render_node(r2::render_node* node, uniform_block* scene) {
+		if (!node->material_instance()) return;
 		bind_vao(node);
 
-		auto shader = node->material->material()->shader();
+		auto shader = node->material_instance()->material()->shader();
 		shader->activate();
 
-		if (node->material->material()->format().size() > 0) {
-			auto uniforms = node->material->uniforms();
+		if (node->material_instance()->material()->format()->size() > 0) {
+			auto uniforms = node->material_instance()->uniforms();
 			bind_uniform_block(shader, uniforms);
 		}
+
+		bind_uniform_block(shader, scene);
 
 		auto vseg = node->vertices();
 		auto vbo = vseg.buffer;
@@ -266,10 +347,10 @@ namespace r2 {
 		GLuint ebo_id = ebo == nullptr ? 0 : m_buffers[ebo->id()];
 		GLuint ibo_id = ibo == nullptr ? 0 : m_buffers[ibo->id()];
 
-		glCall(glBindVertexBuffer(0, vbo_id, vseg.memBegin, vbo->format().size()));
+		glCall(glBindVertexBuffer(0, vbo_id, vseg.memBegin, vbo->format()->size()));
 
 		if (ibo) {
-			glCall(glBindVertexBuffer(1, ibo_id, iseg.memBegin, ibo->format().size()));
+			glCall(glBindVertexBuffer(1, ibo_id, iseg.memBegin, ibo->format()->size()));
 		}
 
 		if (ebo) {

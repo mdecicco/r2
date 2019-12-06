@@ -33,13 +33,16 @@ namespace r2 {
 	draw_call::~draw_call() {
 	}
 
-	render_man::render_man() {
+	render_man::render_man() : m_driver(nullptr) {
 	}
 	render_man::~render_man() {
 	}
 
 	void render_man::set_driver(render_driver* d) {
 		m_driver = d;
+
+		static_uniform_formats::scene();
+		static_uniform_formats::node();
 	}
 	render_driver* render_man::driver() const {
 		return m_driver;

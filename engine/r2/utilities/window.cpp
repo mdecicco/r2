@@ -8,7 +8,7 @@ namespace r2 {
 		destroy();
 	}
 
-	bool window::create(i32 Resx, i32 Resy, string Title, bool Resizable, i32 Major, i32 Minor, bool Fullscreen) {
+	bool window::create(i32 Resx, i32 Resy, const mstring& Title, bool Resizable, i32 Major, i32 Minor, bool Fullscreen) {
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, Major);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, Minor);
 		glfwWindowHint(GLFW_OPENGL_PROFILE       , GLFW_OPENGL_CORE_PROFILE);
@@ -47,6 +47,7 @@ namespace r2 {
 		if(!m_window) return;
 
 		glfwDestroyWindow(m_window);
+		m_window = nullptr;
 	}
 
 	bool window::get_close_requested() {

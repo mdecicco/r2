@@ -12,11 +12,23 @@ namespace r2 {
 		auto context = isolate->GetCurrentContext();
 		auto global = context->Global();
 
-		class_<event, raw_ptr_traits> s(isolate);
+		class_<event, v8pp::raw_ptr_traits> s(isolate);
+		register_class_state(s);
 		s.ctor<v8Args>();
+		//s.auto_wrap_objects(true); untested
 		s.set("name", property(&event::name));
 		s.set("stop_propagation", &event::stop_propagating);
 		s.set("data", property(&event::get_script_data, &event::set_script_data));
 		ctx->set("Event", s);
+	}
+
+	void release_event_objects() {
+		Isolate* i = r2engine::get()->scripts()->context()->isolate();
+		detail::classes::find<raw_ptr_traits>(i, detail::type_id<event>()).remove_objects();
+	}
+
+	void reset_event_object_storage() {
+		Isolate* i = r2engine::get()->scripts()->context()->isolate();
+		detail::classes::find<raw_ptr_traits>(i, detail::type_id<event>()).reset_objects_map();
 	}
 };

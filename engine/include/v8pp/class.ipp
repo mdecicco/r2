@@ -45,6 +45,7 @@ V8PP_IMPL object_registry<Traits>::object_registry(v8::Isolate* isolate, type_in
 	, ctor_() // no wrapped class constructor available by default
 	, dtor_(std::move(dtor))
 	, auto_wrap_objects_(false)
+	, objects_(new std::unordered_map<pointer_type, wrapped_object>())
 {
 	v8::HandleScope scope(isolate_);
 
@@ -74,11 +75,7 @@ V8PP_IMPL object_registry<Traits>::object_registry(v8::Isolate* isolate, type_in
 	func->Inherit(js_func);
 }
 
-template<typename Traits>
-V8PP_IMPL object_registry<Traits>::~object_registry()
-{
-	remove_objects();
-}
+
 
 template<typename Traits>
 V8PP_IMPL void object_registry<Traits>::add_base(object_registry& info, cast_function cast)
@@ -129,13 +126,13 @@ V8PP_IMPL bool object_registry<Traits>::cast(pointer_type& ptr, type_info const&
 template<typename Traits>
 V8PP_IMPL void object_registry<Traits>::remove_object(object_id const& obj)
 {
-	auto it = objects_.find(Traits::key(obj));
-	assert(it != objects_.end() && "no object");
-	if (it != objects_.end())
+	auto it = (*objects_).find(Traits::key(obj));
+	assert(it != (*objects_).end() && "no object");
+	if (it != (*objects_).end())
 	{
 		v8::HandleScope scope(isolate_);
 		reset_object(it->first, it->second);
-		objects_.erase(it);
+		(*objects_).erase(it);
 	}
 }
 
@@ -143,19 +140,19 @@ template<typename Traits>
 V8PP_IMPL void object_registry<Traits>::remove_objects()
 {
 	v8::HandleScope scope(isolate_);
-	for (auto& object_wrapped : objects_)
+	for (auto& object_wrapped : (*objects_))
 	{
 		reset_object(object_wrapped.first, object_wrapped.second);
 	}
-	objects_.clear();
+	(*objects_).clear();
 }
 
 template<typename Traits>
 V8PP_IMPL typename object_registry<Traits>::pointer_type
 object_registry<Traits>::find_object(object_id id, type_info const& type) const
 {
-	auto it = objects_.find(Traits::key(id));
-	if (it != objects_.end())
+	auto it = (*objects_).find(Traits::key(id));
+	if (it != (*objects_).end())
 	{
 		pointer_type ptr = it->first;
 		if (cast(ptr, type))
@@ -169,8 +166,8 @@ object_registry<Traits>::find_object(object_id id, type_info const& type) const
 template<typename Traits>
 V8PP_IMPL v8::Local<v8::Object> object_registry<Traits>::find_v8_object(pointer_type const& ptr) const
 {
-	auto it = objects_.find(ptr);
-	if (it != objects_.end())
+	auto it = (*objects_).find(ptr);
+	if (it != (*objects_).end())
 	{
 		return to_local(isolate_, it->second.pobj);
 	}
@@ -187,8 +184,8 @@ V8PP_IMPL v8::Local<v8::Object> object_registry<Traits>::find_v8_object(pointer_
 template<typename Traits>
 V8PP_IMPL v8::Local<v8::Object> object_registry<Traits>::wrap_object(pointer_type const& object, bool call_dtor)
 {
-	auto it = objects_.find(object);
-	if (it != objects_.end())
+	auto it = (*objects_).find(object);
+	if (it != (*objects_).end())
 	{
 		//assert(false && "duplicate object");
 		throw std::runtime_error(class_name()
@@ -211,7 +208,7 @@ V8PP_IMPL v8::Local<v8::Object> object_registry<Traits>::wrap_object(pointer_typ
 			object_registry* this_ = static_cast<object_registry*>(data.GetInternalField(1));
 			this_->remove_object(object);
 		}, v8::WeakCallbackType::kInternalFields);
-	objects_.emplace(object, wrapped_object{ std::move(pobj), call_dtor });
+	(*objects_).emplace(object, wrapped_object{ std::move(pobj), call_dtor });
 
 	return scope.Escape(obj);
 }

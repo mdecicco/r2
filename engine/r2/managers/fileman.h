@@ -1,14 +1,31 @@
 #pragma once
-#include <r2/config.h>
+#include <r2/managers/memman.h>
+#include <r2/managers/engine_state.h>
 
-#include <stdio.h>
-#include <string>
-#include <vector>
-#include <list>
-using namespace std;
+namespace v8pp {
+	struct raw_ptr_traits;
+};
 
-namespace r2
-{
+namespace r2 {
+	class data_container;
+	class directory_info;
+	class state_container_factory : public engine_state_data_factory {
+		public:
+			state_container_factory() { }
+			~state_container_factory() { }
+
+			virtual engine_state_data* create();
+	};
+
+	class state_containers : public engine_state_data {
+		public:
+			state_containers() { }
+			~state_containers();
+
+			mlist<data_container*> containers;
+			mvector<directory_info*> directories;
+	};
+
     enum DIR_ENTRY_TYPE
     {
         DET_FILE,
@@ -21,27 +38,26 @@ namespace r2
     {
         public:
             directory_entry() : Type(DET_INVALID) { }
-            directory_entry(const directory_entry& o);
+            directory_entry(const directory_entry& o) : Type(o.Type), Name(o.Name), Extension(o.Extension) { }
             ~directory_entry() { }
 
             DIR_ENTRY_TYPE Type;
-            string Name;
-            string Extension;
+            mstring Name;
+            mstring Extension;
     };
 
-    class directory_info
-    {
+    class directory_info {
         public:
             directory_info() : m_entries(0), m_entryCount(0) { }
             ~directory_info() { if(m_entries) delete [] m_entries; }
 
-            void populate(const string& d);
+            void populate(const mstring& d);
             int entry_count() const { return m_entryCount; }
-            directory_entry entry(i32 idx) const { return m_entries[idx]; }
+            directory_entry* entry(i32 idx) const { return &m_entries[idx]; }
 
-            /* std::vector refuses to work in this case... */
             directory_entry* m_entries;
             i32 m_entryCount;
+			mstring m_path;
     };
 
     enum DATA_MODE
@@ -56,12 +72,10 @@ namespace r2
      * written to a file until Save is called.
      */
     class file_man;
-    class data_container
-    {
+    class data_container {
         public:
-            bool read_data(void* data,u32 size);
-            bool write_data(const void* data,u32 size);
-            bool write_string(const string& data) { return write_data(&data[0],data.length()); }
+            bool read_data(void* data, u32 size);
+            bool write_data(const void* data, u32 size);
 
             template <typename T> bool read(T& data) { return read_data((void*)&data,sizeof(T)); }
             template <typename T> bool write(const T& data) { return write_data((const void*)&data,sizeof(T)); }
@@ -80,6 +94,8 @@ namespace r2
             bool read_int64(i64& data);
             bool read_float32(f32& data);
             bool read_float64(f64& data);
+			bool read_string(mstring& data, u32 length);
+			bool read_line(mstring& data);
 
             /*
              * The following functions functions automatically
@@ -96,66 +112,69 @@ namespace r2
             bool write_int64(const i64& data);
             bool write_float32(const f32& data);
             bool write_float64(const f64& data);
+			bool write_string(const mstring& data);
 
             void seek(i32 off); /* adds to m_offset */
             void set_position(u32 pos);
             u32 position() const { return m_offset; }
-            bool at_end(u32 end_off = 0) const { return m_offset > m_size - end_off; }
+			bool at_end(u32 end_off = 0) const { return m_offset > m_size - end_off; }
+			bool at_end_v8() const { return m_offset >= m_size; }
             void* data() { return &m_data[m_offset]; }
 			void clear();
             u32 size() const { return m_size; }
 
-            string name() const { return m_name; }
+            mstring name() const { return m_name; }
 
         protected:
             friend class file_man;
-            data_container(file_man* fs,FILE* fp,const string& name,DATA_MODE mode) :
-                m_mgr(fs), m_name(name), m_mode(mode), m_handle(fp), m_size(0), m_offset(0) { }
+			friend class state_containers;
+			friend class v8pp::raw_ptr_traits;
+            data_container(FILE* fp, const mstring& name, DATA_MODE mode);
             ~data_container();
 
             typedef list<data_container*>::iterator id;
 
-            file_man* m_mgr;
-            string m_name;
+            mstring m_name;
             DATA_MODE m_mode;
             id m_iterator;
+			bool m_inState;
 
             /* For streamed data */
             FILE* m_handle;
             u32 m_size;
 
             /* For in-memory data */
-            vector<u8> m_data;
+            mvector<u8> m_data;
+			allocator_id m_allocatorId;
             u32 m_offset;
     };
 
     class r2engine;
-    class file_man
-    {
+    class file_man {
         public:
-            file_man(r2engine* eng) { m_eng = eng; }
-            ~file_man();
+            file_man() { }
+            ~file_man() { }
 
-            r2engine* engine() const { return m_eng; }
+			void initialize();
 
             /* container names default to filenames when not set (or pointer address when create() is used) */
-            data_container* create(DATA_MODE mode,const string& name = "");
-            data_container* open(const string& file,DATA_MODE mode,const string& name = "");
-            data_container* load(const string& file,DATA_MODE mode,const string& name = "");
-            bool save(data_container* data,const string& file);
-            void destroy(data_container* container);
+            data_container* create(DATA_MODE mode, const mstring& name = "");
+            data_container* open(const mstring& file, DATA_MODE mode, const mstring& name = "");
+            data_container* load(const mstring& file, DATA_MODE mode, const mstring& name = "");
+            bool save(data_container* data, const mstring& file);
+			void destroy(data_container* container);
 
-            string working_directory() const;
-            void set_working_directory(const string& dir);
-            directory_info* parse_directory(const string& dir);
-            bool exists(const string& entry);
+			// used by v8
+			void destroy_nodelete(data_container* container);
 
-            void shutdown();
+            mstring working_directory() const;
+            void set_working_directory(const mstring& dir);
+            directory_info* parse_directory(const mstring& dir);
+			void destroy_directory(directory_info* dir);
+            bool exists(const mstring& entry);
 
         protected:
             friend class data_container;
-            r2engine* m_eng;
-            list<data_container*> m_containers;
-
+			engine_state_data_ref<state_containers> m_stateData;
     };
 };

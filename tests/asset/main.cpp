@@ -4,8 +4,8 @@
 
 class test_asset : public r2::asset {
     public:
-        test_asset(int param1,float param2) {
-            printf("test_asset(%d,%f)\n",param1,param2);
+        test_asset(int param1, float param2) {
+            printf("test_asset(%d, %f)\n", param1, param2);
             m_int = param1;
             m_float = param2;
         }
@@ -13,17 +13,17 @@ class test_asset : public r2::asset {
 
         }
 
-        virtual bool deserialize(const unsigned char* data,size_t length) {
-            string s((char*)data,length);
+        virtual bool deserialize(const unsigned char* data, size_t length) {
+            r2::mstring s((char*)data, length);
             printf("----CONTENTS----\n%s\n----END CONTENTS----\n",s.c_str());
             return true;
         }
         virtual bool serialize(unsigned char** data,size_t* length) {
             char* out = new char[32];
-            memset(out,0,32);
-            *length = snprintf(out,32,"Testy: %d: %f\n",m_int,m_float);
+            memset(out, 0, 32);
+            *length = snprintf(out, 32, "Testy: %d: %f\n", m_int, m_float);
             *data = new unsigned char[*length];
-            memcpy(*data,out,*length);
+            memcpy(*data, out, *length);
             delete [] out;
             return true;
         }
@@ -38,12 +38,12 @@ int main(int argc,char** argv) {
     r2::asset_man* assets = eng->assets();
 
     // no errors here, unless it can't find the file
-    test_asset* ass0 = assets->create<test_asset,int,float>("test_asset0",0,0);
-    ass0->load("CMakeLists.txt");
+    test_asset* ass0 = assets->create<test_asset>("test_asset0", 0, 0);
+    ass0->load("asset_test/test_asset.txt");
 
     // should cause a warning at shutdown time
-    test_asset* ass1 = assets->create<test_asset,int,float>("test_asset1",45,12.35f);
-    ass1->save("test.txt");
+    test_asset* ass1 = assets->create<test_asset>("test_asset1", 45, 12.35f);
+    ass1->save("asset_test/test.txt");
 
     assets->destroy(ass0);
 

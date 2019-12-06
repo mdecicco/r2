@@ -1,10 +1,5 @@
 #pragma once
-
-#include <vector>
-#include <string>
-#include <unordered_map>
-using namespace std;
-
+#include <r2/managers/memman.h>
 #include <r2/utilities/buffer.h>
 
 namespace r2 {
@@ -26,88 +21,96 @@ namespace r2 {
 			uniform_format(const uniform_format& o);
             ~uniform_format();
 
-            void add_attr(const string& name, uniform_attribute_type type);
+            void add_attr(const mstring& name, uniform_attribute_type type);
             bool operator==(const uniform_format& rhs) const;
-			const vector<uniform_attribute_type>& attributes() const;
-			const vector<string>& attributeNames() const;
+			const mvector<uniform_attribute_type>& attributes() const;
+			uniform_attribute_type attrType(u16 attrIdx) const;
+			const mvector<mstring>& attributeNames() const;
+			mstring attrName(u16 attrIdx) const;
 
             size_t size() const;
 			size_t offsetOf(u16 attrIdx) const;
-            string to_string() const;
-			string hash_name() const;
+            mstring to_string() const;
+			mstring hash_name() const;
 
         protected:
-            vector<uniform_attribute_type> m_attrs;
-			vector<string> m_attrNames;
-			vector<size_t> m_attrOffsets;
+            mvector<uniform_attribute_type> m_attrs;
+			mvector<mstring> m_attrNames;
+			mvector<size_t> m_attrOffsets;
             size_t m_uniformSize;
-            string m_fmtString;
-			string m_hashName;
+            mstring m_fmtString;
+			mstring m_hashName;
     };
 
     class uniform_buffer;
-    struct ufm_bo_segment : public gpu_buffer_segment{
+    struct ufm_bo_segment : public gpu_buffer_segment {
+		ufm_bo_segment() : gpu_buffer_segment(), buffer(nullptr) { }
 		uniform_buffer* buffer;
     };
 
 	class uniform_block {
 		public:
-			uniform_block(const string& name, const ufm_bo_segment& buffer_segment);
+			uniform_block(const mstring& name, const ufm_bo_segment& buffer_segment);
 			~uniform_block();
 
-			void uniform(const string& name, const void* value);
-			string name() const;
+			void uniform(const mstring& name, const void* value);
+			mstring name() const;
 
 			const ufm_bo_segment& buffer_info() const;
 
-			void uniform_int   (const string& name, const i32&    value);
-			void uniform_uint  (const string& name, const u32&    value);
-			void uniform_float (const string& name, const f32&    value);
-			void uniform_vec2i (const string& name, const vec2i&  value);
-			void uniform_vec2ui(const string& name, const vec2ui& value);
-			void uniform_vec2f (const string& name, const vec2f&  value);
-			void uniform_vec3i (const string& name, const vec3i&  value);
-			void uniform_vec3ui(const string& name, const vec3ui& value);
-			void uniform_vec3f (const string& name, const vec3f&  value);
-			void uniform_vec4i (const string& name, const vec4i&  value);
-			void uniform_vec4ui(const string& name, const vec4ui& value);
-			void uniform_vec4f (const string& name, const vec4f&  value);
-			void uniform_mat2i (const string& name, const mat2i&  value);
-			void uniform_mat2ui(const string& name, const mat2ui& value);
-			void uniform_mat2f (const string& name, const mat2f&  value);
-			void uniform_mat3i (const string& name, const mat3i&  value);
-			void uniform_mat3ui(const string& name, const mat3ui& value);
-			void uniform_mat3f (const string& name, const mat3f&  value);
-			void uniform_mat4i (const string& name, const mat4i&  value);
-			void uniform_mat4ui(const string& name, const mat4ui& value);
-			void uniform_mat4f (const string& name, const mat4f&  value);
+			void uniform_int   (const mstring& name, const i32&    value);
+			void uniform_uint  (const mstring& name, const u32&    value);
+			void uniform_float (const mstring& name, const f32&    value);
+			void uniform_vec2i (const mstring& name, const vec2i&  value);
+			void uniform_vec2ui(const mstring& name, const vec2ui& value);
+			void uniform_vec2f (const mstring& name, const vec2f&  value);
+			void uniform_vec3i (const mstring& name, const vec3i&  value);
+			void uniform_vec3ui(const mstring& name, const vec3ui& value);
+			void uniform_vec3f (const mstring& name, const vec3f&  value);
+			void uniform_vec4i (const mstring& name, const vec4i&  value);
+			void uniform_vec4ui(const mstring& name, const vec4ui& value);
+			void uniform_vec4f (const mstring& name, const vec4f&  value);
+			void uniform_mat2i (const mstring& name, const mat2i&  value);
+			void uniform_mat2ui(const mstring& name, const mat2ui& value);
+			void uniform_mat2f (const mstring& name, const mat2f&  value);
+			void uniform_mat3i (const mstring& name, const mat3i&  value);
+			void uniform_mat3ui(const mstring& name, const mat3ui& value);
+			void uniform_mat3f (const mstring& name, const mat3f&  value);
+			void uniform_mat4i (const mstring& name, const mat4i&  value);
+			void uniform_mat4ui(const mstring& name, const mat4ui& value);
+			void uniform_mat4f (const mstring& name, const mat4f&  value);
 
 		protected:
-			string m_name;
+			mstring m_name;
 
-			ufm_bo_segment getSegmentForField(const string& name) const;
+			ufm_bo_segment getSegmentForField(const mstring& name) const;
 
 			ufm_bo_segment m_bufferSegment;
-			unordered_map<string, u16> m_uniformOffsetMap;
-			unordered_map<string, u16> m_uniformIndexMap;
-			unordered_map<string, size_t> m_uniformSizeMap;
+			munordered_map<mstring, u16> m_uniformOffsetMap;
+			munordered_map<mstring, u16> m_uniformIndexMap;
+			munordered_map<mstring, size_t> m_uniformSizeMap;
 	};
 
     class uniform_buffer : public gpu_buffer {
         public:
-			uniform_buffer(const uniform_format& fmt, size_t max_count);
+			uniform_buffer(uniform_format* fmt, size_t max_count);
             ~uniform_buffer();
 
-            const uniform_format& format() const;
+            uniform_format* format() const;
 			virtual void* data() const;
 
-            ufm_bo_segment append(const void* data, size_t count);
+            ufm_bo_segment append(const void* data);
 			void update(const ufm_bo_segment& segment, const void* data);
 
         protected:
-			uniform_format m_format;
+			uniform_format* m_format;
             size_t m_uniformCount;
             size_t m_maxCount;
             unsigned char* m_data;
     };
+
+	namespace static_uniform_formats {
+		uniform_format* scene();
+		uniform_format* node();
+	};
 }

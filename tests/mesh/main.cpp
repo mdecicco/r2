@@ -19,19 +19,21 @@ struct test_vertex {
 };
 
 struct test_instance_data {
-    test_instance_data(float x = 0, float y = 0, float _scale = 1, i32 _colorIdx = 0) {
+    test_instance_data(float x = 0, float y = 0, float _scale = 1, float _rotation = 0, i32 _colorIdx = 0) {
         pos_x = x; pos_y = y;
         scale = _scale;
+		rotation = _rotation;
 		colorIdx = _colorIdx;
     }
     ~test_instance_data() { }
 
 	bool operator==(const test_instance_data& rhs) {
-		return pos_x == rhs.pos_x && pos_y == rhs.pos_y && scale == rhs.scale && colorIdx == rhs.colorIdx;
+		return pos_x == rhs.pos_x && pos_y == rhs.pos_y && scale == rhs.scale && rotation == rhs.rotation && colorIdx == rhs.colorIdx;
 	}
 
     float pos_x, pos_y;
     float scale;
+	float rotation;
 	i32 colorIdx;
 };
 #pragma pack(pop)
@@ -41,11 +43,15 @@ int main(int argc, char** argv) {
 	r2::r2engine* eng = r2::r2engine::get();
 
 	eng->open_window(200, 200, "mesh test", true);
+	eng->renderer()->set_driver(new gl_render_driver(eng->renderer()));
 
-	gl_render_driver* driver = new gl_render_driver(eng->renderer());
-	eng->renderer()->set_driver(driver);
+	// The engine will automatically use a scene with the name "##debug##" as the current
+	// scene, even if there is a currently active state
+    scene* scene1 = eng->scenes()->create("##debug##");
 
-    scene* scene1 = eng->scenes()->create("scene1");
+	// mesh_test.js uses the same shader, material (essentially), but places 5 instances
+	// between the instances defined here
+	eng->scripts()->executeFile("./resource/mesh_test.js");
 
     // define mesh characteristics
     vertex_format vfmt;
@@ -55,6 +61,7 @@ int main(int argc, char** argv) {
     instance_format ifmt;
     ifmt.add_attr(iat_vec2f); // pos
 	ifmt.add_attr(iat_float); // scale
+	ifmt.add_attr(iat_float); // rotation
 	ifmt.add_attr(iat_int); // color index
 
     // create the mesh
@@ -80,15 +87,15 @@ int main(int argc, char** argv) {
     mesh->append_index<u8>(3); // bottom left
 
     // 4 instances, one in each corner
-	mesh->append_instance(test_instance_data(-0.5, -0.5, 0.5, 0));
-	mesh->append_instance(test_instance_data(-0.5,  0.5, 0.5, 1));
-	mesh->append_instance(test_instance_data( 0.5, -0.5, 0.5, 2));
-	mesh->append_instance(test_instance_data( 0.5,  0.5, 0.5, 3));
+	mesh->append_instance(test_instance_data(-0.5, -0.5, 0.5, 180, 0));
+	mesh->append_instance(test_instance_data(-0.5,  0.5, 0.5,   0, 1));
+	mesh->append_instance(test_instance_data( 0.5, -0.5, 0.5,   0, 2));
+	mesh->append_instance(test_instance_data( 0.5,  0.5, 0.5,   0, 3));
 
 	// Test that the data copied to the mesh buffers properly
 	{
 		test_vertex vertices[4];
-		memcpy(vertices, mesh->vertex_data(), mesh->vertexFormat().size() * 4);
+		memcpy(vertices, mesh->vertex_data(), mesh->vertexFormat()->size() * 4);
 		assert(vertices[0] == test_vertex(-0.5, 0.5, 0.0, 1.0));
 		assert(vertices[1] == test_vertex( 0.5, 0.5, 1.0, 1.0));
 		assert(vertices[2] == test_vertex( 0.5,-0.5, 1.0, 0.0));
@@ -104,11 +111,11 @@ int main(int argc, char** argv) {
 		assert(indices[5] == 3);
 
 		test_instance_data instances[4];
-		memcpy(instances, mesh->instance_data(), mesh->instanceFormat().size() * 4);
-		assert(instances[0] == test_instance_data(-0.5, -0.5, 0.5, 0));
-		assert(instances[1] == test_instance_data(-0.5,  0.5, 0.5, 1));
-		assert(instances[2] == test_instance_data( 0.5, -0.5, 0.5, 2));
-		assert(instances[3] == test_instance_data( 0.5,  0.5, 0.5, 3));
+		memcpy(instances, mesh->instance_data(), mesh->instanceFormat()->size() * 4);
+		assert(instances[0] == test_instance_data(-0.5, -0.5, 0.5, 180, 0));
+		assert(instances[1] == test_instance_data(-0.5,  0.5, 0.5,   0, 1));
+		assert(instances[2] == test_instance_data( 0.5, -0.5, 0.5,   0, 2));
+		assert(instances[3] == test_instance_data( 0.5,  0.5, 0.5,   0, 3));
 	}
 
 
@@ -116,15 +123,13 @@ int main(int argc, char** argv) {
 	
 	// Test that the data copied to the scene's buffer pool properly
 	{
-		test_vertex vertices[4];
-		memcpy(vertices, node->vertices().buffer->data(), node->vertices().buffer->format().size() * 4);
+		test_vertex* vertices = (test_vertex*)node->vertices().buffer->data() + node->vertices().begin;
 		assert(vertices[0] == test_vertex(-0.5, 0.5, 0.0, 1.0));
 		assert(vertices[1] == test_vertex( 0.5, 0.5, 1.0, 1.0));
 		assert(vertices[2] == test_vertex( 0.5,-0.5, 1.0, 0.0));
 		assert(vertices[3] == test_vertex(-0.5,-0.5, 0.0, 0.0));
 
-		u8 indices[6];
-		memcpy(indices, node->indices().buffer->data(), node->indices().buffer->type() * 6);
+		u8* indices = (u8*)node->indices().buffer->data() + node->indices().begin;
 		assert(indices[0] == 0);
 		assert(indices[1] == 1);
 		assert(indices[2] == 2);
@@ -132,12 +137,11 @@ int main(int argc, char** argv) {
 		assert(indices[4] == 2);
 		assert(indices[5] == 3);
 
-		test_instance_data instances[4];
-		memcpy(instances, node->instances().buffer->data(), node->instances().buffer->format().size() * 4);
-		assert(instances[0] == test_instance_data(-0.5, -0.5, 0.5, 0));
-		assert(instances[1] == test_instance_data(-0.5,  0.5, 0.5, 1));
-		assert(instances[2] == test_instance_data( 0.5, -0.5, 0.5, 2));
-		assert(instances[3] == test_instance_data( 0.5,  0.5, 0.5, 3));
+		test_instance_data* instances = (test_instance_data*)node->instances().buffer->data() + node->instances().begin;
+		assert(instances[0] == test_instance_data(-0.5, -0.5, 0.5, 180, 0));
+		assert(instances[1] == test_instance_data(-0.5,  0.5, 0.5,   0, 1));
+		assert(instances[2] == test_instance_data( 0.5, -0.5, 0.5,   0, 2));
+		assert(instances[3] == test_instance_data( 0.5,  0.5, 0.5,   0, 3));
 	}
 
 	// load shader
@@ -150,15 +154,16 @@ int main(int argc, char** argv) {
 	mfmt.add_attr("color[1]", uat_vec3f);
 	mfmt.add_attr("color[2]", uat_vec3f);
 	mfmt.add_attr("color[3]", uat_vec3f);
-	node_material material("u_material", mfmt);
+	node_material material("u_material", &mfmt);
 	material.set_shader(program);
 
 	// create material instance for node
-	node->material = material.instantiate(scene1);
-	node->material->uniforms()->uniform_vec3f("color[0]", vec3f(1.0f, 1.0f, 1.0f));
-	node->material->uniforms()->uniform_vec3f("color[1]", vec3f(1.0f, 0.0f, 0.0f));
-	node->material->uniforms()->uniform_vec3f("color[2]", vec3f(0.0f, 1.0f, 0.0f));
-	node->material->uniforms()->uniform_vec3f("color[3]", vec3f(0.0f, 0.0f, 1.0f));
+	node->set_material_instance(material.instantiate(scene1));
+	node->material_instance()->uniforms()->uniform_vec3f("color[0]", vec3f(1.0f, 1.0f, 0.0f));
+	node->material_instance()->uniforms()->uniform_vec3f("color[1]", vec3f(1.0f, 0.0f, 0.0f));
+	node->material_instance()->uniforms()->uniform_vec3f("color[2]", vec3f(0.0f, 1.0f, 0.0f));
+	node->material_instance()->uniforms()->uniform_vec3f("color[3]", vec3f(0.0f, 0.0f, 1.0f));
+	
 
 	scene1->generate_vaos();
 	scene1->sync_buffers();
@@ -166,7 +171,8 @@ int main(int argc, char** argv) {
     // start the engine
     int r = eng->run();
 
-	delete node->material;
+	delete mesh;
+	delete node->material_instance();
 	eng->assets()->destroy(program);
     eng->scenes()->destroy(scene1);
 	eng->shutdown();

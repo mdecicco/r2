@@ -3,31 +3,31 @@
 
 namespace r2 {
     static size_t attr_sizes[21] = {
-        4 , 4 , 1,
-        8 , 8 , 2,
-        12, 12, 3,
-        16, 16, 4,
-        16, 16, 4,
-        36, 36, 9,
+        4 , 4 , 4,
+        8 , 8 , 8,
+        12, 12, 12,
+        16, 16, 16,
+        16, 16, 16,
+        36, 36, 36
     };
 
-	static string attr_names[21] = {
-		"int"  , "float", "byte" ,
-		"vec2i", "vec2f", "vec2b",
-		"vec3i", "vec3f", "vec3b",
-		"vec4i", "vec4f", "vec4b",
-		"mat2i", "mat2f", "mat2b",
-		"mat3i", "mat3f", "mat3b",
-		"mat4i", "mat4f", "mat4b",
+	static mstring attr_names[21] = {
+		"int"  , "float", "uint" ,
+		"vec2i", "vec2f", "vec2ui",
+		"vec3i", "vec3f", "vec3ui",
+		"vec4i", "vec4f", "vec4ui",
+		"mat2i", "mat2f", "mat2ui",
+		"mat3i", "mat3f", "mat3ui",
+		"mat4i", "mat4f", "mat4ui"
 	};
-	static string attr_hash_names[21] = {
-		"i"  , "f"  , "b"  ,
-		"2i" , "2f" , "2b" ,
-		"3i" , "3f" , "3b" ,
-		"4i" , "4f" , "4b" ,
-		"m2i", "m2f", "m2b",
-		"m3i", "m3f", "m3b",
-		"m4i", "m4f", "m4b",
+	static mstring attr_hash_names[21] = {
+		"i"  , "f"  , "u"  ,
+		"2i" , "2f" , "2u" ,
+		"3i" , "3f" , "3u" ,
+		"4i" , "4f" , "4u" ,
+		"m2i", "m2f", "m2u",
+		"m3i", "m3f", "m3u",
+		"m4i", "m4f", "m4u"
 	};
     vertex_format::vertex_format() {
         m_vertexSize = 0;
@@ -56,7 +56,7 @@ namespace r2 {
 
         return true;
     }
-	const vector<vertex_attribute_type>& vertex_format::attributes() const {
+	const mvector<vertex_attribute_type>& vertex_format::attributes() const {
 		return m_attrs;
 	}
     size_t vertex_format::size() const {
@@ -73,26 +73,26 @@ namespace r2 {
 
 		return offset;
 	}
-    string vertex_format::to_string() const {
+    mstring vertex_format::to_string() const {
         return m_fmtString;
     }
-	string vertex_format::hash_name() const {
+	mstring vertex_format::hash_name() const {
 		return m_hashName;
 	}
 
-    vertex_buffer::vertex_buffer(const vertex_format& fmt, size_t max_count) : gpu_buffer(max_count * fmt.size()) {
+    vertex_buffer::vertex_buffer(vertex_format* fmt, size_t max_count) : gpu_buffer(max_count * fmt->size()) {
         m_format = fmt;
         m_maxCount = max_count;
         m_vertexCount = 0;
-        r2Log("Allocating %d bytes for a maximum of %d vertices of format [%s]", m_format.size() * max_count, max_count, m_format.to_string().c_str());
-        m_data = new unsigned char[m_format.size() * max_count];
+        r2Log("Allocating %s for a maximum of %d vertices of format [%s] (buf: %d)", format_size(m_format->size() * max_count), max_count, m_format->to_string().c_str(), m_id);
+        m_data = new unsigned char[m_format->size() * max_count];
     }
     vertex_buffer::~vertex_buffer() {
-        r2Log("Deallocating vertex buffer of format [%s]: (%zu bytes / %zu bytes | %zu vertices / %zu vertices used)", m_format.to_string().c_str(), used_size(), max_size(), m_vertexCount, m_maxCount);
+        r2Log("Deallocating vertex buffer: (%s / %s | %zu / %zu vertices used) (buf: %d)", format_size(used_size()), format_size(max_size()), m_vertexCount, m_maxCount, m_id);
         if(m_data) delete [] m_data;
         m_data = 0;
     }
-	const vertex_format& vertex_buffer::format() const {
+	vertex_format* vertex_buffer::format() const {
         return m_format;
     }
 	void* vertex_buffer::data() const {
@@ -100,7 +100,7 @@ namespace r2 {
 	}
     vtx_bo_segment vertex_buffer::append(const void *data, size_t count) {
         if(count >= m_maxCount - m_vertexCount) {
-            r2Error("Insufficient space in vertex buffer of format [%s] for %d vertices (%d max)", m_format.to_string().c_str(), count, m_maxCount);
+            r2Error("Insufficient space in vertex buffer of format [%s] for %d vertices (%d max) (buf: %d)", m_format->to_string().c_str(), count, m_maxCount, m_id);
             vtx_bo_segment seg;
             seg.buffer = nullptr;
             memset(&seg, 0, sizeof(vtx_bo_segment));
@@ -111,9 +111,9 @@ namespace r2 {
         seg.begin = m_vertexCount;
         seg.memBegin = used_size();
         seg.end = seg.begin + count;
-        seg.memEnd = seg.end * m_format.size();
+        seg.memEnd = seg.end * m_format->size();
 
-        r2Log("Buffering data range: %zu -> %zu (buf: 0x%X)", seg.memBegin, seg.memEnd,(intptr_t)m_data);
+		r2Log("Buffering data range: %zu -> %zu (buf: %d)", seg.memBegin, seg.memEnd, m_id);
         memcpy((u8*)m_data + seg.memBegin, data, seg.memEnd - seg.memBegin);
         m_vertexCount += count;
 

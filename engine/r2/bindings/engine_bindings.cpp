@@ -1,4 +1,3 @@
-#include <r2/bindings/bindings.h>
 #include <r2/engine.h>
 #include <v8pp/class.hpp>
 #include <v8pp/json.hpp>
@@ -8,129 +7,13 @@ using namespace v8;
 using namespace v8pp;
 
 namespace r2 {
-	var::var() : isolate(0) { }
-	var::var(Isolate* i, const Local<Value>& v) : isolate(i), value(v) { }
-	var::var(Isolate* i, const string& jsonValue) : isolate(i) {
-		auto context = isolate->GetCurrentContext();
-		auto global = context->Global();
-
-		auto JSON = global->Get(v8str("JSON"))->ToObject(isolate);
-		auto JSON_stringify = Handle<Function>::Cast(JSON->Get(v8str("parse")));
-		Local<Value> param[1] = { v8str(jsonValue.c_str()) };
-		JSON_stringify->Call(context, JSON, 1, param).ToLocal(&value);
-	}
-	var::~var() { }
-
-	var::operator string() {
-		if (value->IsObject()) {
-			auto context = isolate->GetCurrentContext();
-			auto global = context->Global();
-			HandleScope scope(isolate);
-
-			auto JSON = global->Get(v8str("JSON"))->ToObject(isolate);
-			auto JSON_stringify = Handle<Function>::Cast(JSON->Get(v8str("stringify")));
-			Local<Value> param[1] = { value };
-			Local<Value> result;
-			JSON_stringify->Call(context, JSON, 1, param).ToLocal(&result);
-			return *String::Utf8Value(isolate, result);
-		}
-		return *String::Utf8Value(isolate, value);
-	}
-
-	var::operator i64() {
-		auto v = value->ToBigInt(isolate->GetCurrentContext());
-		Local<Value> l;
-		v.ToLocal(&l);
-		auto o = l.As<BigInt>();
-		return o->Int64Value();
-	}
-
-	var::operator u64() {
-		auto v = value->ToBigInt(isolate->GetCurrentContext());
-		Local<Value> l;
-		v.ToLocal(&l);
-		auto o = l.As<BigInt>();
-		return o->Uint64Value();
-	}
-
-	var::operator i32() {
-		auto v = *value->ToInt32(isolate);
-		return v->Int32Value(isolate->GetCurrentContext()).FromJust();
-	}
-
-	var::operator u32() {
-		auto v = value->ToUint32(isolate->GetCurrentContext());
-		Local<Value> l;
-		v.ToLocal(&l);
-		return l->Uint32Value(isolate->GetCurrentContext()).FromJust();
-	}
-
-	var::operator i16() {
-		auto v = *value->ToInt32(isolate);
-		return v->Int32Value(isolate->GetCurrentContext()).FromJust();
-	}
-
-	var::operator u16() {
-		auto v = value->ToUint32(isolate->GetCurrentContext());
-		Local<Value> l;
-		v.ToLocal(&l);
-		return l->Uint32Value(isolate->GetCurrentContext()).FromJust();
-	}
-
-	var::operator i8() {
-		auto v = *value->ToInt32(isolate);
-		return v->Int32Value(isolate->GetCurrentContext()).FromJust();
-	}
-
-	var::operator u8() {
-		auto v = value->ToUint32(isolate->GetCurrentContext());
-		Local<Value> l;
-		v.ToLocal(&l);
-		return l->Uint32Value(isolate->GetCurrentContext()).FromJust();
-	}
-
-	var::operator f64() {
-		auto v = *value->ToNumber(isolate);
-		return v->NumberValue(isolate->GetCurrentContext()).FromJust();
-	}
-
-	var::operator f32() {
-		auto v = *value->ToNumber(isolate);
-		return v->NumberValue(isolate->GetCurrentContext()).FromJust();
-	}
-
-	var::operator bool() {
-		auto v = value->ToBoolean(isolate->GetCurrentContext());
-		Local<Value> l;
-		v.ToLocal(&l);
-		return *l;
-	}
-
-	var var::operator[](const char* prop) const {
-		if (value->IsObject()) {
-			auto v = Local<Object>::Cast(value)->Get(isolate->GetCurrentContext(), v8str(prop));
-			Local<Value> local;
-			v.ToLocal(&local);
-			return var(isolate, local);
-		}
-
-		return *this;
-	}
-
-	trace::trace(Isolate* isolate) {
-		auto trace = StackTrace::CurrentStackTrace(isolate, 1)->GetFrame(isolate, 0);
-		file = *String::Utf8Value(isolate, trace->GetScriptName());
-		function = *String::Utf8Value(isolate, trace->GetFunctionName());
-		line = trace->GetLineNumber();
-	}
-
 	void log(v8Args args) {
 		r2engine* engine = r2engine::get();
 		auto isolate = args.GetIsolate();
 		auto context = args.GetIsolate()->GetCurrentContext();
 		auto global = context->Global();
 
-		string text;
+		mstring text;
 		for (u8 i = 0; i < args.Length(); i++) {
 			if (i > 0) text += " ";
 			text += var(isolate, args[i]);
@@ -145,7 +28,7 @@ namespace r2 {
 		auto context = args.GetIsolate()->GetCurrentContext();
 		auto global = context->Global();
 
-		string text;
+		mstring text;
 		for (u8 i = 0; i < args.Length(); i++) {
 			if (i > 0) text += " ";
 			if (args[i]->IsObject()) {
@@ -169,7 +52,7 @@ namespace r2 {
 		auto context = args.GetIsolate()->GetCurrentContext();
 		auto global = context->Global();
 
-		string text;
+		mstring text;
 		for (u8 i = 0; i < args.Length(); i++) {
 			if (i > 0) text += " ";
 			if (args[i]->IsObject()) {
@@ -218,7 +101,7 @@ namespace r2 {
 
 		i32 v_width = 0;
 		i32 v_height = 0;
-		string v_title = "";
+		mstring v_title = "";
 		bool v_can_resize = false;
 		bool v_fullscreen = false;
 
@@ -286,30 +169,39 @@ namespace r2 {
 		r2engine::get()->states()->register_state(s);
 	}
 
-	void activate_state(const string& stateName) {
-		r2engine::get()->states()->activate(stateName);
+	void activate_state(const mstring& stateName) {
+		trace t(r2engine::isolate());
+		event e(t.file, t.line, "activate_state", true, false);
+		e.data()->write_string(stateName);
+
+		r2engine::get()->dispatchAtFrameStart(&e);
 	}
+
+	size_t kb2b(size_t kb) { return KBtoB(kb); }
+	size_t mb2b(size_t mb) { return MBtoB(mb); }
+	size_t gb2b(size_t gb) { return GBtoB(gb); }
 
 	void bind_engine(context* ctx) {
 		bind_event(ctx);
 		bind_math(ctx);
 		bind_imgui(ctx);
 		bind_graphics(ctx);
+		bind_io(ctx);
 
 		auto isolate = ctx->isolate();
 		auto context = isolate->GetCurrentContext();
 		auto global = context->Global();
 
-		Local<Array> states = Local<Array>::New(isolate, Array::New(isolate));
-		global->Set(v8str("_states"), states);
-
 		module m(isolate);
 
 		{
-			class_<state, raw_ptr_traits> s(isolate);
+			class_<state, v8pp::raw_ptr_traits> s(isolate);
 			s.ctor<v8Args>();
+			register_class_state(s);
 			s.set("set_update_frequency", &state::setUpdateFrequency);
 			s.set("get_average_update_duration", &state::getAverageUpdateDuration);
+			s.set("max_memory", property(&state::getMaxMemorySize));
+			s.set("used_memory", property(&state::getUsedMemorySize));
 			m.set("State", s);
 		}
 
@@ -322,6 +214,28 @@ namespace r2 {
 		m.set("register_state", &register_state);
 		m.set("activate_state", &activate_state);
 
+		module mem(isolate);
+		mem.set("Kilobytes", kb2b);
+		mem.set("Megabytes", mb2b);
+		mem.set("Gigabytes", gb2b);
+		global->Set(v8str("Memory"), mem.new_instance());
+
 		global->Set(v8str("engine"), m.new_instance());
+	}
+
+	void release_state_objects() {
+		release_event_objects();
+		release_math_objects();
+		release_imgui_objects();
+		release_graphics_objects();
+		release_io_objects();
+	}
+
+	void reset_state_object_storage() {
+		reset_event_object_storage();
+		reset_math_object_storage();
+		reset_imgui_object_storage();
+		reset_graphics_object_storage();
+		reset_io_object_storage();
 	}
 }

@@ -8,3 +8,4 @@ SOURCE_GROUP("" FILES ${5_mesh_test_src})
 
 target_include_directories(5_mesh_test PUBLIC ../../engine)
 target_link_libraries(5_mesh_test r2)
+set_property(TARGET 5_mesh_test PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}")

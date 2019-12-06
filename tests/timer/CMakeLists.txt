@@ -8,3 +8,4 @@ SOURCE_GROUP("" FILES ${7_timer_test_src})
 
 target_include_directories(7_timer_test PUBLIC ../../engine)
 target_link_libraries(7_timer_test r2)
+set_property(TARGET 7_timer_test PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}")

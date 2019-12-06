@@ -1,10 +1,7 @@
 #pragma once
-#include <r2/config.h>
+#include <r2/managers/memman.h>
 #include <r2/managers/assetman.h>
-
-#include <vector>
-#include <unordered_map>
-using namespace std;
+#include <r2/managers/stateman.h>
 
 namespace r2 {
     class r2engine;
@@ -29,7 +26,7 @@ namespace r2 {
 			virtual void deactivate() = 0;
 			virtual bool check_compatible(render_node* node) = 0;
 
-			virtual u32 get_uniform_location(const string& name) = 0;
+			virtual u32 get_uniform_location(const mstring& name) = 0;
 			virtual void uniform1i(u32 loc, i32 value) = 0;
 			virtual void uniform2i(u32 loc, i32 v0, i32 v1) = 0;
 			virtual void uniform3i(u32 loc, i32 v0, i32 v1, i32 v2) = 0;
@@ -89,7 +86,10 @@ namespace r2 {
 
             render_man* manager() const;
 
+			virtual shader_program* load_shader(const mstring& file, const mstring& assetName) = 0;
+
 			virtual void generate_vao(r2::render_node* node) { }
+			virtual void free_vao(r2::render_node* node) { }
 			virtual void bind_vao(r2::render_node* node) { }
 			virtual void unbind_vao() { }
 			virtual void sync_buffer(gpu_buffer* buf) = 0;
@@ -101,7 +101,11 @@ namespace r2 {
 			virtual size_t get_uniform_attribute_size(uniform_attribute_type type) const;
 			virtual void serialize_uniform_value(const void* input, void* output, uniform_attribute_type type) const;
 
-			virtual void render_node(r2::render_node* node) = 0;
+			// Certain drivers require uniform blocks stored in a buffer to be aligned
+			// to a specific value
+			virtual size_t get_uniform_buffer_block_offset_alignment() const { return 0; };
+
+			virtual void render_node(r2::render_node* node, uniform_block* scene) = 0;
 
 
         protected:

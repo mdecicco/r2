@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ufwb version="1.17">
+    <grammar name="DAT grammar" start="id:2" author="Computer" fileextension="dat">
+        <description>Grammar for DAT files</description>
+        <structure name="r2_mem" id="2" encoding="ISO_8859-1:1987" endian="little" signed="no">
+            <structure name="block" id="13" alignment="0" repeatmin="unlimited" repeatmax="-1">
+                <number name="block_size" id="6" strokecolor="007E1F" fillcolor="007E1F" type="integer" length="8"/>
+                <number name="allocated_to_level" id="7" strokecolor="918C00" fillcolor="918C00" type="integer" length="1"/>
+                <structure name="next_block_addr_and_padding" id="11" length="15" strokecolor="740001" fillcolor="740001"/>
+                <structure name="data" id="9" length="block_size" alignment="0" strokecolor="006590" fillcolor="006590"/>
+            </structure>
+        </structure>
+    </grammar>
+</ufwb>

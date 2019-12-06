@@ -11,7 +11,7 @@ namespace r2 {
     }
 
 	void gpu_buffer::appended(size_t begin, size_t end) {
-		m_used += end - begin;
+		m_used = end;
 		updated(begin, end);
 	}
 
@@ -38,7 +38,7 @@ namespace r2 {
 		return m_updates.size() > 0;
 	}
 
-	const std::list<gpu_buffer::changed_buffer_segment>& gpu_buffer::updates() const {
+	const mlist<gpu_buffer::changed_buffer_segment>& gpu_buffer::updates() const {
 		return m_updates;
 	}
 
@@ -65,5 +65,12 @@ namespace r2 {
 
 	void buffer_pool::sync_buffers(render_driver* driver) {
 		for (auto buf : m_buffers) driver->sync_buffer(buf);
+	}
+	void buffer_pool::free_buffers(render_driver* driver) {
+		for (auto buf : m_buffers) {
+			driver->free_buffer(buf);
+			delete buf;
+		}
+		m_buffers.clear();
 	}
 }

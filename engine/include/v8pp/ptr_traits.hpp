@@ -55,7 +55,9 @@ struct raw_ptr_traits
 	template<typename T>
 	static void destroy(object_pointer_type<T> const& ptr)
 	{
-		delete ptr;
+		// modified for r2 engine, all deallocations related to v8
+		// will be handled by the engine
+		// delete ptr;
 	}
 
 	template<typename T>

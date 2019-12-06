@@ -8,3 +8,5 @@ SOURCE_GROUP("" FILES ${6_interpolator_test_src})
 
 target_include_directories(6_interpolator_test PUBLIC ../../engine)
 target_link_libraries(6_interpolator_test r2)
+set_property(TARGET 6_interpolator_test PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG}")
+
