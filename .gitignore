@@ -9,3 +9,4 @@ Makefile
 *.pdb
 *.ilk
 build/
+bin/*.dat
