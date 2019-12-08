@@ -4,6 +4,75 @@
 namespace r2 {
 	r2engine* r2engine::instance = nullptr;
 	log_man* r2engine::logMgr = nullptr;
+	mvector<entity_system*> r2engine::systems = mvector<entity_system*>();
+
+	state_entities::state_entities() : entities(nullptr) {
+		entities = new mlist<scene_entity*>();
+		uninitializedEntities = new mvector<scene_entity*>();
+	}
+
+	state_entities::~state_entities() {
+		delete entities;
+		entities = nullptr;
+		delete uninitializedEntities;
+		uninitializedEntities = nullptr;
+	}
+
+	engine_state_data* state_entities_factory::create() {
+		return new state_entities();
+	}
+
+
+
+
+	void r2engine::register_system(entity_system* system) {
+		r2engine::systems.push_back(system);
+	}
+
+	void r2engine::entity_created(scene_entity* entity) {
+		for(entity_system* sys : r2engine::systems) {
+			sys->_entity_added(entity);
+		}
+
+		auto ref = r2engine::instance->m_entities;
+		ref.enable();
+		ref->uninitializedEntities->push_back(entity);
+		ref.disable();
+	}
+
+	void r2engine::entity_destroyed(scene_entity* entity) {
+		for(entity_system* sys : r2engine::systems) {
+			sys->_entity_removed(entity);
+		}
+
+		auto ref = r2engine::instance->m_entities;
+		ref.enable();
+		for(auto it = ref->entities->begin();it != ref->entities->end();it++) {
+			if ((*it)->id() == entity->id()) {
+				ref->entities->erase(it);
+				break;
+			}
+		}
+
+		bool wasUninitialized = false;
+		for (auto it = ref->uninitializedEntities->begin(); it != ref->uninitializedEntities->end(); it++) {
+			if ((*it)->id() == entity->id()) {
+				ref->uninitializedEntities->erase(it);
+				wasUninitialized = true;
+				break;
+			}
+		}
+
+		if (!wasUninitialized) {
+			entity->unbind("wasInitialized");
+			entity->unbind("handleEvent");
+			entity->unbind("update");
+			entity->unbind("willBeDestroyed");
+			if (!entity->parent()) r2engine::instance->remove_child(entity);
+		}
+
+		ref.disable();
+	}
 
 	void r2engine::create(int argc, char** argv) {
 		if (instance) return;
@@ -15,6 +84,13 @@ namespace r2 {
 		instance->m_fileMgr->initialize();
 		instance->m_scriptMgr->initialize();
 
+		instance->m_entities = instance->m_stateMgr->register_state_data_factory<state_entities>(new state_entities_factory());
+
+		for(entity_system* sys : r2engine::systems) {
+			sys->_initialize();
+			instance->add_child(sys);
+		}
+
 		// initialize global state data
 		for(auto factory : instance->m_stateMgr->m_engineStateDataFactories) {
 			engine_state_data* data = factory->create();
@@ -23,6 +99,9 @@ namespace r2 {
 
 		instance->scripts()->executeFile("./builtin.min.js");
 	}
+
+
+
 
     r2engine::r2engine(int argc,char** argv) : m_platform(v8::platform::NewDefaultPlatform()) {
         for(int i = 0;i < argc;i++) m_args.push_back(mstring(argv[i]));
@@ -138,19 +217,56 @@ namespace r2 {
 		data_container* data = evt->data();
 		if (data) data->set_position(0);
 
-		if (evt->name() == "activate_state") {
+		if (evt->name() == EVT_NAME_ACTIVATE_STATE) {
 			mstring name;
 			if (!data->read_string(name, data->size())) {
 				r2Error("Failed to read new state name from event data. Not changing states.");
 			} else m_stateMgr->activate(name);
+		} else if (evt->name() == EVT_NAME_DESTROY_ENTITY) {
+			scene_entity* entity;
+			if (!data->read(entity)) {
+				r2Error("Failed to read pointer to entity to delete. Not deleting.");
+			} else {
+				entity->destroy();
+				delete entity;
+			}
 		}
     }
+
+	void r2engine::initialize_new_entities() {
+		for(entity_system* sys : r2engine::systems) sys->initialize_entities();
+
+		auto ref = r2engine::instance->m_entities;
+		ref.enable();
+		for(scene_entity* entity : *ref->uninitializedEntities) {
+			entity->bind("wasInitialized");
+			entity->bind("handleEvent");
+			entity->bind("update");
+			entity->bind("willBeDestroyed");
+
+			if (!entity->parent()) this->add_child(entity);
+			entity->initialize();
+			ref->entities->push_front(entity);
+		}
+		ref->uninitializedEntities->clear();
+		ref.disable();
+	}
+
+	void r2engine::update_entities(f32 dt) {
+		auto ref = r2engine::instance->m_entities;
+		ref.enable();
+		for(scene_entity* entity : *ref->entities) entity->update(dt);
+		ref.disable();
+	}
 
     int r2engine::run() {
 		timer frameTimer; frameTimer.start();
 		f32 last_time = 0.0f;
 
 		while(!m_window.get_close_requested()) {
+			// initialize any entities created last frame
+			initialize_new_entities();
+
 			// get input events
 			m_window.poll();
 
@@ -167,9 +283,11 @@ namespace r2 {
 			last_time = time_now;
 
 			state* currentState = m_stateMgr->current();
-			if (currentState) {
-				currentState->update();
-			}
+			if (currentState) currentState->update(dt);
+
+			for(entity_system* sys : r2engine::systems) sys->tick(dt);
+
+			update_entities(dt);
 
 			scene* currentScene = current_scene();
 			if (currentScene) currentScene->render();
