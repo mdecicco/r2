@@ -4,18 +4,10 @@
 #include <r2/managers/memman.h>
 #include <r2/managers/engine_state.h>
 #include <r2/utilities/event.h>
-#include <r2/utilities/timer.h>
-#include <r2/utilities/average.h>
+#include <r2/utilities/periodic_update.h>
 #include <r2/managers/engine_state.h>
 #include <r2/bindings/v8helpers.h>
 using namespace std;
-
-typedef v8::Handle<v8::Value> LocalValueHandle;
-typedef v8::Handle<v8::Object> LocalObjectHandle;
-typedef v8::Handle<v8::Function> LocalFunctionHandle;
-typedef v8::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> PersistentValueHandle;
-typedef v8::Persistent<v8::Object, v8::CopyablePersistentTraits<v8::Object>> PersistentObjectHandle;
-typedef v8::Persistent<v8::Function, v8::CopyablePersistentTraits<v8::Function>> PersistentFunctionHandle;
 
 namespace r2 {
     class r2engine;
@@ -23,7 +15,7 @@ namespace r2 {
     class asset;
 	class scene;
 
-    class state : public event_receiver {
+    class state : public event_receiver, public periodic_update {
         public:
             state(v8Args args);
             virtual ~state();
@@ -43,16 +35,15 @@ namespace r2 {
 			void willBecomeInactive();
 			void becameInactive();
 			void willBeDestroyed();
-			void update();
+			virtual void doUpdate(f32 frameDt, f32 updateDt);
 			void render();
 			virtual void handle(event* evt);
 
-			void setUpdateFrequency(f32 freq) { m_updateFrequency = freq; }
-			f32 getAverageUpdateDuration() const;
+			virtual void belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired);
+
 			void releaseResources();
 			size_t getMaxMemorySize() const;
 			size_t getUsedMemorySize() const;
-			bool shouldUpdate();
 
 			void activate_allocator();
 			void deactivate_allocator(bool unsetEngineStateRef = false);
@@ -76,14 +67,6 @@ namespace r2 {
 			memory_allocator* m_memory;
 			size_t m_desiredMemorySize;
 			scene* m_scene;
-
-			bool m_releaseResourcesOnDeactivate;
-			f32 m_updateFrequency;
-			average* m_averageUpdateDuration;
-			timer m_updateTmr;
-			timer m_dt;
-			timer m_timeSinceBelowFrequencyStarted;
-			timer m_timeSinceBelowFrequencyLogged;
             mstring* m_name;
     };
 

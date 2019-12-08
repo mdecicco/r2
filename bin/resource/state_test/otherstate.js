@@ -36,16 +36,16 @@ class OtherTestState extends engine.State {
 		} else engine.log(evt);
 	}
 
-	update = (dt) => {
+	update = (frameDt, updateDt) => {
 		const avg_update_dur = this.get_average_update_duration();
 
-		this.fps_history.push(1.0 / dt);
+		this.fps_history.push(1.0 / updateDt);
 		this.aud_history.push(1.0 / avg_update_dur);
 
 		if (this.fps_history.length > this.fps_history_len) this.fps_history = this.fps_history.slice(1);
 		if (this.aud_history.length > this.fps_history_len) this.aud_history = this.aud_history.slice(1);
 
-		this.frq_avg.sample(1.0 / dt);
+		this.frq_avg.sample(1.0 / updateDt);
 		this.max_freq_avg.sample(1.0 / avg_update_dur);
 
 		// artificial load

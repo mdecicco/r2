@@ -85,6 +85,14 @@ namespace r2 {
 		r2Error(err.c_str());
 	}
 
+	bool check_script_exception(Isolate* isolate, const TryCatch& tc) {
+		if (tc.HasCaught()) {
+			script_exception(isolate, tc.Exception(), tc.Message());
+			return false;
+		}
+		return true;
+	}
+
 	void js_require(v8Args args) {
 		Isolate* i = args.GetIsolate();
 		if (args.Length() != 1 || !args[0]->IsString()) {
