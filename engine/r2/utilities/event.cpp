@@ -12,7 +12,6 @@ namespace r2 {
 			__set_temp_engine_state_ref(nullptr);
 			m_internalOnly = true;
 		} else m_data = nullptr;
-		
     }
 
 	event::event(const event& o) {
@@ -21,20 +20,12 @@ namespace r2 {
 		m_name = o.m_name;
 		m_recurse = o.m_recurse;
 		m_internalOnly = o.m_internalOnly;
+		m_jsonData = o.m_jsonData;
 		m_data = o.m_data;
 		const_cast<event&>(o).m_data = nullptr;
-		if(!m_data && !o.m_scriptData.value.IsEmpty()) {
-			mstring json = const_cast<event&>(o).m_scriptData;
-			if (json.length() > 0) {
-				__set_temp_engine_state_ref(TEMP_STATE_REF__ENGINE);
-				m_data = r2engine::get()->files()->create(DM_TEXT, "event_json_data");
-				__set_temp_engine_state_ref(nullptr);
-				m_data->write_string(json);
-			}
-		}
 	}
 
-	event::event(v8Args args) : m_scriptData(args.Length() >= 2 ? var(args.GetIsolate(), args[1]) : var(args.GetIsolate(), "{}")) {
+	event::event(v8Args args) {
 		m_recurse = true;
 		auto isolate = args.GetIsolate();
 		trace t(isolate);
@@ -42,7 +33,11 @@ namespace r2 {
 		m_caller.file = t.file;
 		m_caller.line = t.line;
 		m_data = nullptr;
-		if (args.Length() == 3) m_recurse = var(isolate, args[2]);
+		m_internalOnly = false;
+		if (args.Length() >= 2) {
+			if (args.Length() == 3) m_recurse = var(isolate, args[2]);
+			m_jsonData = var(args.GetIsolate(), args[1]);
+		} else m_jsonData = "{}";
 	}
 
     event::~event() {
@@ -70,12 +65,12 @@ namespace r2 {
         return m_data;
     }
 
-	void event::set_script_data_from_cpp(const var& v) {
-		m_scriptData = v;
+	void event::set_json_from_cpp(const var& v) {
+		m_jsonData = v;
 	}
 
-	void event::set_script_data(v8Args args) {
-		if (args.Length() != 1) args.GetIsolate()->ThrowException(v8::String::NewFromUtf8(args.GetIsolate(), "Incorrect number of arguments provided to event::set_script_data"));
+	void event::set_json(v8Args args) {
+		if (args.Length() != 1) args.GetIsolate()->ThrowException(v8::String::NewFromUtf8(args.GetIsolate(), "Incorrect number of arguments provided to event::set_json"));
 		else {
 			if (m_data) {
 				__set_temp_engine_state_ref(TEMP_STATE_REF__ENGINE);
@@ -84,28 +79,12 @@ namespace r2 {
 
 			}
 			m_data = nullptr;
-			m_scriptData = var(args.GetIsolate(), args[0]);
+			m_jsonData = var(args.GetIsolate(), args[0]);
 		}
 	}
 
-	v8::Local<v8::Value> event::get_script_data() {
-		// This event may have been deferred, but sent from JS
-		// If so, de-serialize the json string created when the
-		// event was deferred and assign it to m_scriptData
-		if (m_data) {
-			if (m_data->name() == "event_json_data") {
-				mstring json;
-				m_data->set_position(0);
-				if(m_data->read_string(json, m_data->size())) {
-					m_scriptData = var(r2engine::get()->scripts()->context()->isolate(), json);
-				}
-			}
-			__set_temp_engine_state_ref(TEMP_STATE_REF__ENGINE);
-			r2engine::get()->files()->destroy(m_data);
-			__set_temp_engine_state_ref(nullptr);
-			m_data = nullptr;
-		}
-		return m_scriptData.value;
+	v8::Local<v8::Value> event::get_json() {
+		return var(r2engine::isolate(), m_jsonData).value;
 	}
 
 
@@ -118,17 +97,29 @@ namespace r2 {
     }
 
     void event_receiver::add_child(event_receiver *child) {
-        m_children.push_back(child);
+        m_children.push_front(child);
     }
 
     void event_receiver::remove_child(event_receiver* child) {
         for(auto i = m_children.begin();i != m_children.end();i++) {
-            if(*i == child) {
+            if((*i) == child) {
                 m_children.erase(i);
                 return;
             }
         }
     }
+	void event_receiver::subscribe(const mstring& eventName) {
+		m_subscribesTo.push_front(eventName);
+	}
+
+	void event_receiver::unsubscribe(const mstring& eventName) {
+		for(auto i = m_subscribesTo.begin();i != m_subscribesTo.end();i++) {
+			if((*i) == eventName) {
+				m_subscribesTo.erase(i);
+				return;
+			}
+		}
+	}
 
 	void event_receiver::frame_started() {
 		m_isAtFrameStart = true;
@@ -147,10 +138,23 @@ namespace r2 {
     void event_receiver::dispatch(event* e) {
         if(e->data()) e->data()->set_position(0);
 
-		// ensure derived classes operate in their own memory scopes (or default to global)
-		memory_man::push_current(m_memory);
-        handle(e);
-		memory_man::pop_current();
+		bool subscribesTo = true;
+		if (m_subscribesTo.size() > 0) {
+			subscribesTo = false;
+			for(auto ename : m_subscribesTo) {
+				if (ename == e->name()) {
+					subscribesTo = true;
+					break;
+				}
+			}
+		}
+
+		if (subscribesTo) {
+			// ensure derived classes operate in their own memory scopes (or default to global)
+			memory_man::push_current(m_memory);
+			handle(e);
+			memory_man::pop_current();
+		}
 
         if(!e->is_recursive()) return;
         for(auto i = m_children.begin();i != m_children.end();i++) {

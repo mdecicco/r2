@@ -10,13 +10,12 @@
 
 using namespace std;
 
-namespace v8pp {
-};
-
 namespace r2 {
 	class r2engine;
 	class script_man;
 	class state;
+
+	bool check_script_exception(v8::Isolate* isolate, const v8::TryCatch& tc);
 
 	class script : public asset {
 		public:

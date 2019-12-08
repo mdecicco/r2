@@ -9,6 +9,13 @@
 
 #define v8str(str) v8::String::NewFromUtf8(isolate, str)
 
+typedef v8::Handle<v8::Value> LocalValueHandle;
+typedef v8::Handle<v8::Object> LocalObjectHandle;
+typedef v8::Handle<v8::Function> LocalFunctionHandle;
+typedef v8::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> PersistentValueHandle;
+typedef v8::Persistent<v8::Object, v8::CopyablePersistentTraits<v8::Object>> PersistentObjectHandle;
+typedef v8::Persistent<v8::Function, v8::CopyablePersistentTraits<v8::Function>> PersistentFunctionHandle;
+
 namespace r2 {
 	struct var {
 		var();
@@ -18,18 +25,18 @@ namespace r2 {
 		var(v8::Isolate* i, T v) : isolate(i), value(v8pp::to_v8(i, v)) { }
 		~var();
 
-		operator mstring();
-		operator i64();
-		operator u64();
-		operator i32();
-		operator u32();
-		operator i16();
-		operator u16();
-		operator i8();
-		operator u8();
-		operator f64();
-		operator f32();
-		operator bool();
+		operator mstring() const;
+		operator i64() const;
+		operator u64() const;
+		operator i32() const;
+		operator u32() const;
+		operator i16() const;
+		operator u16() const;
+		operator i8() const;
+		operator u8() const;
+		operator f64() const;
+		operator f32() const;
+		operator bool() const;
 
 		var operator[](const char* prop) const;
 

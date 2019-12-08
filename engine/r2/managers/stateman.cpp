@@ -10,9 +10,7 @@ using namespace v8pp;
 namespace r2 {
     state::state(v8Args args) :
 		m_mgr(r2engine::get()->states()),
-		m_updateFrequency(0.0f),
 		isolate(args.GetIsolate()),
-		m_averageUpdateDuration(nullptr),
 		m_name(nullptr),
 		m_engineData(nullptr),
 		m_memory(nullptr),
@@ -85,7 +83,7 @@ namespace r2 {
 		m_engineData = new mvector<engine_state_data*>();
 		m_mgr->initialize_state_engine_data(this);
 
-		m_averageUpdateDuration = new average(16);
+		initialize_periodic_update();
 		m_scene = r2engine::get()->scenes()->create((*m_name) + "_scene");
 
 		LocalObjectHandle self = convert<state*>::to_v8(isolate, this);
@@ -184,7 +182,7 @@ namespace r2 {
 			delete m_engineData;
 			m_engineData = nullptr;
 		}
-		if (m_averageUpdateDuration) { delete m_averageUpdateDuration; m_averageUpdateDuration = nullptr; }
+		destroy_periodic_update();
 		if (m_name) { delete m_name; m_name = nullptr; }
 		deactivate_allocator(true);
 	}
@@ -220,10 +218,8 @@ namespace r2 {
 	}
 
 	void state::becameActive() {
-		m_updateTmr.reset();
-		m_updateTmr.start();
-		m_dt.reset();
-		m_dt.start();
+		start_periodic_updates();
+
 		if (!m_becameActive.IsEmpty()) {
 			activate_allocator();
 			m_becameActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
@@ -240,6 +236,8 @@ namespace r2 {
 	}
 
 	void state::becameInactive() {
+		stop_periodic_updates();
+
 		if (!m_becameInactive.IsEmpty()) {
 			activate_allocator();
 			m_becameInactive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
@@ -255,16 +253,14 @@ namespace r2 {
 		}
 	}
 
-	void state::update() {
-		if (!shouldUpdate()) return;
+	void state::doUpdate(f32 frameDt, f32 updateDt) {
 		if (!m_update.IsEmpty()) {
 			activate_allocator();
-			f32 dt = m_dt;
-			m_dt.reset();
-			m_dt.start();
-			Local<Value> arg = to_v8(isolate, dt);
-			m_update.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 1, &arg);
-			(*m_averageUpdateDuration) += (f32)m_dt;
+			Local<Value> args[2] = {
+				to_v8(isolate, frameDt),
+				to_v8(isolate, updateDt)
+			};
+			m_update.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 2, args);
 			deactivate_allocator(true);
 		}
 	}
@@ -278,7 +274,7 @@ namespace r2 {
 	}
 
 	void state::handle(event* evt) {
-		if (!m_handleEvent.IsEmpty()) {
+		if (!m_handleEvent.IsEmpty() && !evt->is_internal_only()) {
 			activate_allocator();
 			auto param = Local<Value>::Cast(convert<event>::to_v8(isolate, *evt));
 			m_handleEvent.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 1, &param);
@@ -286,8 +282,8 @@ namespace r2 {
 		}
 	}
 
-	f32 state::getAverageUpdateDuration() const {
-		return *m_averageUpdateDuration;
+	void state::belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired) {
+		r2Warn("State \"%s\" has been updating at %0.2f%% less than the desired frequency (%0.2f Hz) for more than %0.2f seconds", m_name->c_str(), percentLessThanDesired, desiredFreq, timeSpentLowerThanDesired);
 	}
 
 	void state::releaseResources() {
@@ -312,42 +308,6 @@ namespace r2 {
 
 	size_t state::getUsedMemorySize() const {
 		return m_memory->used();
-	}
-
-	bool state::shouldUpdate() {
-		if (m_updateFrequency <= 0.0f) return true;
-		f32 timeSinceUpdate = m_updateTmr;
-		f32 waitDuration = (1.0f / m_updateFrequency);
-		static f32 warnDiffFrac = 0.1f;
-		static f32 warnLogInterval = 30.0f;
-		static f32 warnAfterBelowForInterval = 5.0f;
-		if (timeSinceUpdate >= waitDuration) {
-			//printf("\"%s\": current: %0.2f Hz (%0.2fs) desired: %0.2f Hz (%0.2fs) (%0.2f%% of desired)\n", m_name.c_str(), 1.0f / timeSinceUpdate, timeSinceUpdate, m_updateFrequency, waitDuration, (waitDuration / timeSinceUpdate) * 100.0f);
-			f32 delta = timeSinceUpdate - waitDuration;
-			if (delta > waitDuration * warnDiffFrac) {
-				if (m_timeSinceBelowFrequencyStarted.stopped()) {
-					m_timeSinceBelowFrequencyStarted.start();
-				}
-				bool warnCondition0 = m_timeSinceBelowFrequencyStarted.elapsed() > warnAfterBelowForInterval;
-				bool warnCondition1 = m_timeSinceBelowFrequencyLogged.elapsed() > warnLogInterval || m_timeSinceBelowFrequencyLogged.stopped();
-				if (warnCondition0 && warnCondition1) {
-					r2Warn("State \"%s\" has been updating at %0.2f%% less than the desired frequency (%0.2f Hz) for more than %0.2f seconds", m_name->c_str(), warnDiffFrac * 100.0f, m_updateFrequency, warnAfterBelowForInterval);
-					if (m_timeSinceBelowFrequencyLogged.stopped()) m_timeSinceBelowFrequencyLogged.start();
-					else {
-						m_timeSinceBelowFrequencyLogged.reset();
-						m_timeSinceBelowFrequencyLogged.start();
-					}
-				}
-			} else if (!m_timeSinceBelowFrequencyStarted.stopped()) {
-				m_timeSinceBelowFrequencyStarted.reset();
-			}
-
-			m_updateTmr.reset();
-			m_updateTmr.start();
-			return true;
-		}
-
-		return false;
 	}
 
 	void state::activate_allocator() {

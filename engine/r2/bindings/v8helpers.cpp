@@ -21,7 +21,7 @@ namespace r2 {
 	}
 	var::~var() { }
 
-	var::operator mstring() {
+	var::operator mstring() const {
 		auto context = isolate->GetCurrentContext();
 		auto global = context->Global();
 		HandleScope scope(isolate);
@@ -36,7 +36,7 @@ namespace r2 {
 		return *String::Utf8Value(isolate, result);
 	}
 
-	var::operator i64() {
+	var::operator i64() const {
 		auto v = value->ToBigInt(isolate->GetCurrentContext());
 		Local<Value> l;
 		v.ToLocal(&l);
@@ -44,7 +44,7 @@ namespace r2 {
 		return o->Int64Value();
 	}
 
-	var::operator u64() {
+	var::operator u64() const {
 		auto v = value->ToBigInt(isolate->GetCurrentContext());
 		Local<Value> l;
 		v.ToLocal(&l);
@@ -52,53 +52,53 @@ namespace r2 {
 		return o->Uint64Value();
 	}
 
-	var::operator i32() {
+	var::operator i32() const {
 		auto v = *value->ToInt32(isolate);
 		return v->Int32Value(isolate->GetCurrentContext()).FromJust();
 	}
 
-	var::operator u32() {
+	var::operator u32() const {
 		auto v = value->ToUint32(isolate->GetCurrentContext());
 		Local<Value> l;
 		v.ToLocal(&l);
 		return l->Uint32Value(isolate->GetCurrentContext()).FromJust();
 	}
 
-	var::operator i16() {
+	var::operator i16() const {
 		auto v = *value->ToInt32(isolate);
 		return v->Int32Value(isolate->GetCurrentContext()).FromJust();
 	}
 
-	var::operator u16() {
+	var::operator u16() const {
 		auto v = value->ToUint32(isolate->GetCurrentContext());
 		Local<Value> l;
 		v.ToLocal(&l);
 		return l->Uint32Value(isolate->GetCurrentContext()).FromJust();
 	}
 
-	var::operator i8() {
+	var::operator i8() const {
 		auto v = *value->ToInt32(isolate);
 		return v->Int32Value(isolate->GetCurrentContext()).FromJust();
 	}
 
-	var::operator u8() {
+	var::operator u8() const {
 		auto v = value->ToUint32(isolate->GetCurrentContext());
 		Local<Value> l;
 		v.ToLocal(&l);
 		return l->Uint32Value(isolate->GetCurrentContext()).FromJust();
 	}
 
-	var::operator f64() {
+	var::operator f64() const {
 		auto v = *value->ToNumber(isolate);
 		return v->NumberValue(isolate->GetCurrentContext()).FromJust();
 	}
 
-	var::operator f32() {
+	var::operator f32() const {
 		auto v = *value->ToNumber(isolate);
 		return v->NumberValue(isolate->GetCurrentContext()).FromJust();
 	}
 
-	var::operator bool() {
+	var::operator bool() const {
 		auto v = value->ToBoolean(isolate->GetCurrentContext());
 		Local<Value> l;
 		v.ToLocal(&l);

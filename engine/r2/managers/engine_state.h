@@ -35,7 +35,7 @@ namespace r2 {
 	class engine_state_data_ref {
 		public:
 			engine_state_data_ref()
-				: m_factoryIdx(UINT16_MAX), m_enabled(false), m_valid(false) { }
+				: m_factoryIdx(UINT16_MAX), m_enabled(0), m_valid(false) { }
 			engine_state_data_ref(const engine_state_data_ref<T>& o)
 				: m_factoryIdx(o.m_factoryIdx), m_enabled(o.m_enabled), m_valid(o.m_valid) { }
 
@@ -43,19 +43,20 @@ namespace r2 {
 
 			void enable() {
 				assert(m_valid);
-				__enable_state_mem();
-				m_enabled = true;
+				if (m_enabled == 0) __enable_state_mem();
+				m_enabled++;
 			}
 
 			void disable() {
 				assert(m_valid);
-				__disable_state_mem();
-				m_enabled = false;
+				assert(m_enabled > 0);
+				m_enabled--;
+				if (m_enabled == 0) __disable_state_mem();
 			}
 
 			T* operator -> () const {
 				assert(m_valid);
-				assert(m_enabled);
+				assert(m_enabled > 0);
 				return (T*)__get_state_data(m_factoryIdx);
 			}
 
@@ -65,7 +66,7 @@ namespace r2 {
 				: m_factoryIdx(factoryIdx), m_enabled(false), m_valid(true) { }
 
 			u16 m_factoryIdx;
-			bool m_enabled;
+			u32 m_enabled;
 			bool m_valid;
 	};
 };

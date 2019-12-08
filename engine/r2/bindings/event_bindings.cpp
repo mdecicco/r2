@@ -15,10 +15,10 @@ namespace r2 {
 		class_<event, v8pp::raw_ptr_traits> s(isolate);
 		register_class_state(s);
 		s.ctor<v8Args>();
-		//s.auto_wrap_objects(true); untested
+		s.auto_wrap_objects(true);
 		s.set("name", property(&event::name));
 		s.set("stop_propagation", &event::stop_propagating);
-		s.set("data", property(&event::get_script_data, &event::set_script_data));
+		s.set("data", property(&event::get_json, &event::set_json));
 		ctx->set("Event", s);
 	}
 

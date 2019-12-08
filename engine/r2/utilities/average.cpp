@@ -25,12 +25,8 @@ namespace r2 {
 			m_samples[m_curSample++] = sample;
 			if (m_curSample == m_maxSamples) m_curSample = 0;
 		}
-		f32 accum = m_samples[0];
-		for(u16 i = 1;i < m_count;i++) accum += m_samples[i];
-		return m_curAverage = accum / f32(m_count);
 
-		// pretty sure this works, just want to be sure for now
-		//return m_curAverage = m_accumulated / f32(m_count);
+		return m_curAverage = m_accumulated / f32(m_count);
 	}
 
 	average::operator r2::f32() const {

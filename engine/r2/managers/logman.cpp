@@ -50,7 +50,7 @@ namespace r2 {
 				if (isolate) isolate->ThrowException(v8str(""));
 			}
 			event e(__FILE__, __LINE__, "log", false, true);
-			e.set_script_data_from_cpp(var(eng->scripts()->context()->isolate(), m_lines[m_lines.size() - 1]));
+			e.set_json_from_cpp(var(eng->scripts()->context()->isolate(), m_lines[m_lines.size() - 1]));
 			r2engine::get()->dispatch(&e);
 		}
 	}

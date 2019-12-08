@@ -171,7 +171,7 @@ namespace r2 {
 
 	void activate_state(const mstring& stateName) {
 		trace t(r2engine::isolate());
-		event e(t.file, t.line, "activate_state", true, false);
+		event e(t.file, t.line, EVT_NAME_ACTIVATE_STATE, true, false);
 		e.data()->write_string(stateName);
 
 		r2engine::get()->dispatchAtFrameStart(&e);
@@ -194,6 +194,7 @@ namespace r2 {
 
 		module m(isolate);
 
+		// state, do not remove from v8pp 
 		{
 			class_<state, v8pp::raw_ptr_traits> s(isolate);
 			s.ctor<v8Args>();
@@ -203,6 +204,20 @@ namespace r2 {
 			s.set("max_memory", property(&state::getMaxMemorySize));
 			s.set("used_memory", property(&state::getUsedMemorySize));
 			m.set("State", s);
+		}
+
+		{
+			class_<scene_entity, v8pp::raw_ptr_traits> s(isolate);
+			s.ctor<v8Args>();
+			register_class_state(s);
+			s.set("id", property(&scene_entity::id));
+			s.set("destroy", &scene_entity::deferred_destroy);
+			s.set("set_update_frequency", &scene_entity::setUpdateFrequency);
+			s.set("add_child", &scene_entity::add_child_entity);
+			s.set("remove_child", &scene_entity::remove_child_entity);
+			s.set("subscribe", &scene_entity::subscribe);
+			s.set("unsubscribe", &scene_entity::unsubscribe);
+			m.set("Entity", s);
 		}
 
 		m.set("log", &log);
@@ -224,6 +239,9 @@ namespace r2 {
 	}
 
 	void release_state_objects() {
+		Isolate* i = r2engine::isolate();
+		detail::classes::find<raw_ptr_traits>(i, detail::type_id<scene_entity>()).remove_objects();
+
 		release_event_objects();
 		release_math_objects();
 		release_imgui_objects();
@@ -232,6 +250,9 @@ namespace r2 {
 	}
 
 	void reset_state_object_storage() {
+		Isolate* i = r2engine::isolate();
+		detail::classes::find<raw_ptr_traits>(i, detail::type_id<scene_entity>()).reset_objects_map();
+
 		reset_event_object_storage();
 		reset_math_object_storage();
 		reset_imgui_object_storage();
