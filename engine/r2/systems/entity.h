@@ -4,6 +4,7 @@
 #include <r2/utilities/event.h>
 #include <r2/bindings/v8helpers.h>
 #include <r2/utilities/periodic_update.h>
+#include <r2/utilities/dynamic_array.hpp>
 
 namespace r2 {
 	typedef u32 entityId;
@@ -108,6 +109,8 @@ namespace r2 {
 			scene_entity_component();
 			~scene_entity_component();
 
+			static inline componentId nextId() { return nextComponentId; }
+
 			inline componentId id() const { return m_id; }
 			inline entity_system* system() const { return m_system; }
 
@@ -120,7 +123,7 @@ namespace r2 {
 
 	class entity_system_state : public engine_state_data {
 		public:
-			entity_system_state();
+			entity_system_state(size_t componentSize);
 			~entity_system_state();
 
 			scene_entity_component* component(componentId id);
@@ -129,19 +132,9 @@ namespace r2 {
 
 			template <typename T, typename ... construction_args>
 			T* create(entityId forEntity, construction_args ... args) {
-				size_t off = allocate_offset_for_new_component();
-				if (off != size_t(-1)) {
-					T* comp = new ((u8*)m_components + off) T(args...);
-					(*m_entityComponentIds)[forEntity] = comp->id();
-					(*m_componentOffsets)[comp->id()] = off;
-					m_count++;
-					if (off > m_furthestComponentOffset || m_furthestComponentId == 0) {
-						m_furthestComponentId = comp->id();
-						m_furthestComponentOffset = off;
-					}
-					return comp;
-				}
-				return nullptr;
+				T* comp = m_components->set<T>(scene_entity_component::nextId(), args...);
+				(*m_entityComponentIds)[forEntity] = comp->id();
+				return comp;
 			}
 
 			bool contains_entity(entityId id);
@@ -150,22 +143,15 @@ namespace r2 {
 
 			template <typename T>
 			void for_each(void (*callback)(T*)) {
-				for(u64 i = 0;i < m_count;i++) callback(&((T*)m_components)[i]);
+				m_components->for_each<T>(callback);
 			}
 
 		protected:
 			friend class entity_system_state_factory;
 			friend class entity_system;
-			size_t allocate_offset_for_new_component();
-			void* m_components;
-			munordered_map<componentId, size_t>* m_componentOffsets;
+
+			untyped_associative_pod_array<componentId>* m_components;
 			munordered_map<entityId, componentId>* m_entityComponentIds;
-			size_t m_newOffset;
-			size_t m_maxSize;
-			size_t m_count;
-			size_t m_componentSize;
-			componentId m_furthestComponentId;
-			size_t m_furthestComponentOffset;
 			mvector<scene_entity*>* m_uninitializedEntities;
 	};
 
@@ -186,7 +172,6 @@ namespace r2 {
 			~entity_system();
 
 			virtual const size_t component_size() const = 0;
-			virtual const size_t max_component_count() const = 0;
 			virtual void initialize_entity(scene_entity* entity) = 0;
 			virtual void deinitialize_entity(scene_entity* entity) = 0;
 

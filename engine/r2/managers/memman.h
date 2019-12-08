@@ -28,6 +28,7 @@ namespace r2 {
 			~memory_allocator();
 
 			void* allocate(size_t size);
+			void* reallocate(void* ptr, size_t size);
 			bool deallocate(void* ptr);
 			void deallocate_all();
 
@@ -44,6 +45,8 @@ namespace r2 {
 			memory_allocator();
 			void deallocate_from_self(void* ptr);
 			bool deallocate_called_from_other_allocator(memory_block* block, void* ptr, allocator_id otherAllocatorId);
+			void* reallocate_from_self(void* ptr, size_t size);
+			void* reallocate_called_from_other_allocator(memory_block* block, void* ptr, size_t size, allocator_id otherAllocatorId);
 
 			memory_block* find_available(size_t size);
 
@@ -71,6 +74,7 @@ namespace r2 {
 			static memory_allocator* global();
 
 			static void* allocate(size_t size);
+			static void* reallocate(void* ptr, size_t size);
 			static void deallocate(void* ptr);
 
 			static void debug();
@@ -97,6 +101,7 @@ namespace r2 {
 	};
 
 	void* r2alloc(size_t sz);
+	void* r2realloc(void* ptr, size_t sz);
 	void r2free(void* ptr);
 
 	template <typename T>

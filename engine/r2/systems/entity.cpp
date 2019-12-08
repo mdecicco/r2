@@ -244,24 +244,20 @@ namespace r2 {
 
 
 
-	entity_system_state::entity_system_state()
-		: m_components(nullptr), m_newOffset(0), m_maxSize(0), m_count(0), m_componentSize(0), m_furthestComponentId(0), m_furthestComponentOffset(0) {
-		m_componentOffsets = new munordered_map<componentId, size_t>();
+	entity_system_state::entity_system_state(size_t componentSize) {
+		m_components = new untyped_associative_pod_array<componentId>(componentSize);
 		m_entityComponentIds = new munordered_map<entityId, componentId>();
 		m_uninitializedEntities = new mvector<scene_entity*>();
 	}
 
 	entity_system_state::~entity_system_state() {
-		if (m_components) delete[] m_components;
-		delete m_componentOffsets;
+		delete m_components;
 		delete m_entityComponentIds;
 		delete m_uninitializedEntities;
 	}
 
 	scene_entity_component* entity_system_state::component(componentId id) {
-		auto off = m_componentOffsets->find(id);
-		if (off == m_componentOffsets->end()) return nullptr;
-		return (scene_entity_component*)(((u8*)m_components) + off->second);
+		return (scene_entity_component*)m_components->get(id);
 	}
 
 	scene_entity_component* entity_system_state::entity(entityId id) {
@@ -271,9 +267,7 @@ namespace r2 {
 			return nullptr;
 		}
 
-		auto off = m_componentOffsets->find(ecomp->second);
-		if (off == m_componentOffsets->end()) return nullptr;
-		return (scene_entity_component*)(((u8*)m_components) + off->second);
+		return (scene_entity_component*)m_components->get(ecomp->second);
 	}
 
 	bool entity_system_state::contains_entity(entityId id) {
@@ -281,60 +275,14 @@ namespace r2 {
 	}
 
 	void entity_system_state::destroy(entityId forEntity) {
-		if (m_count == 0) return;
-		for(auto comp : *m_componentOffsets) {
-			printf("(%d, %d) ", comp.first, comp.second);
-		}
-		printf("\n");
-
 		auto ecomp = m_entityComponentIds->find(forEntity);
 		if (ecomp == m_entityComponentIds->end()) {
-			r2Error("Failed to find entity %d in system, not destroying", forEntity);
+			r2Error("Failed to find entity %d in system", forEntity);
 			return;
 		}
 
-		auto iter = m_componentOffsets->find(ecomp->second);
-		if (iter == m_componentOffsets->end()) {
-			r2Error("Failed to find component %d in system, not destroying", ecomp->second);
-			return;
-		}
-
+		m_components->remove(ecomp->second);
 		m_entityComponentIds->erase(ecomp);
-
-		size_t off = iter->second;
-		m_componentOffsets->erase(iter);
-
-		if (ecomp->second != m_furthestComponentId) {
-			// Move the furthest component into the slot made by the destruction
-			// of this component
-			size_t srcOffset = m_furthestComponentOffset;
-			(*m_componentOffsets)[m_furthestComponentId] = off;
-			memcpy(((u8*)m_components) + off, ((u8*)m_components) + srcOffset, m_componentSize);
-		}
-
-		m_furthestComponentId = 0;
-		m_furthestComponentOffset = 0;
-
-		for(auto comp : *m_componentOffsets) {
-			if (comp.second > m_furthestComponentOffset) {
-				m_furthestComponentId = comp.first;
-				m_furthestComponentOffset = comp.second;
-			}
-		}
-
-		m_count--;
-		m_newOffset -= m_componentSize;
-	}
-
-	size_t entity_system_state::allocate_offset_for_new_component() {
-		if (m_newOffset == m_maxSize) {
-			r2Error("Derived entity processing system does not have a high enough max component count to accomodate a new component");
-			return -1;
-		}
-
-		size_t off = m_newOffset;
-		m_newOffset += m_componentSize;
-		return off;
 	}
 
 
@@ -342,14 +290,7 @@ namespace r2 {
 	entity_system_state_factory::entity_system_state_factory(entity_system* sys) : system(sys) { }
 
 	engine_state_data* entity_system_state_factory::create() {
-		auto data = new entity_system_state();
-		data->m_componentSize = system->component_size();
-		data->m_maxSize = system->max_component_count() * system->component_size();
-		if (data->m_maxSize == 0) {
-			r2Warn("Derived entity processing system returned 0 for either component size or max component count");
-			return data;
-		}
-		data->m_components = new u8[data->m_maxSize];
+		auto data = new entity_system_state(system->component_size());
 		return data;
 	}
 
