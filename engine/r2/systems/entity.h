@@ -5,6 +5,7 @@
 #include <r2/bindings/v8helpers.h>
 #include <r2/utilities/periodic_update.h>
 #include <r2/utilities/dynamic_array.hpp>
+#include <r2/bindings/math_converters.h>
 
 namespace r2 {
 	typedef u32 entityId;
@@ -184,6 +185,7 @@ namespace r2 {
 			virtual void unbind(scene_entity* entity) = 0;
 
 			virtual void initialize() { }
+			virtual void deinitialize() { }
 			virtual void tick(f32 dt) { }
 			virtual void handle(event* evt) { }
 
@@ -193,6 +195,7 @@ namespace r2 {
 			friend class r2engine;
 			engine_state_data_ref<entity_system_state> m_state;
 			void _initialize();
+			void _deinitialize();
 			void _entity_added(scene_entity* entity);
 			void _entity_removed(scene_entity* entity);
 			void initialize_entities();

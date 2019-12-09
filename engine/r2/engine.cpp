@@ -1,6 +1,8 @@
 #include <r2/engine.h>
 #include <stdio.h>
 
+#include <r2/systems/transform_sys.h>
+
 namespace r2 {
 	r2engine* r2engine::instance = nullptr;
 	log_man* r2engine::logMgr = nullptr;
@@ -21,7 +23,6 @@ namespace r2 {
 	engine_state_data* state_entities_factory::create() {
 		return new state_entities();
 	}
-
 
 
 
@@ -77,6 +78,8 @@ namespace r2 {
 	void r2engine::create(int argc, char** argv) {
 		if (instance) return;
 
+		r2engine::register_system(new transform_sys());
+
 		logMgr = new log_man();
 		instance = new r2engine(argc, argv);
 
@@ -102,7 +105,6 @@ namespace r2 {
 
 
 
-
     r2engine::r2engine(int argc,char** argv) : m_platform(v8::platform::NewDefaultPlatform()) {
         for(int i = 0;i < argc;i++) m_args.push_back(mstring(argv[i]));
 
@@ -112,7 +114,9 @@ namespace r2 {
 		v8::V8::InitializePlatform(m_platform.get());
 		v8::V8::Initialize();
 
-        m_stateMgr = new state_man();
+		initialize_event_receiver();
+        
+		m_stateMgr = new state_man();
         m_assetMgr = new asset_man();
         m_fileMgr = new file_man();
 		m_renderMgr = new render_man();
@@ -130,8 +134,17 @@ namespace r2 {
     }
 
     r2engine::~r2engine() {
-		m_stateMgr->clearActive();				// depends on script manager
-		m_stateMgr->destroyStates();			// depends on script manager
+		
+		m_stateMgr->clearActive();				// depends on script manager, entities
+		m_stateMgr->destroyStates();			// depends on script manager, entities
+
+		destroy_all_entities();
+
+		for (auto system : r2engine::instance->systems) {
+			system->_deinitialize();
+			remove_child(system);
+			delete system;
+		}
 
 		delete m_scriptMgr; m_scriptMgr = 0;	// variable dependencies (based on script usage)
         delete m_stateMgr;  m_stateMgr  = 0;	// depends on scene manager
@@ -139,6 +152,8 @@ namespace r2 {
 		delete m_renderMgr; m_renderMgr = 0;
 		delete m_fileMgr;   m_fileMgr   = 0;
 		delete m_assetMgr;  m_assetMgr  = 0;
+
+		destroy_event_receiver();
 
 		v8::V8::ShutdownPlatform();
 		glfwTerminate();
@@ -232,13 +247,22 @@ namespace r2 {
 			}
 		}
     }
+	
+	void r2engine::destroy_all_entities() {
+		m_entities.enable();
+		for (auto entity : *m_entities->entities) {
+			entity->destroy();
+			delete entity;
+		}
+		m_entities->entities->clear();
+		m_entities.disable();
+	}
 
 	void r2engine::initialize_new_entities() {
+		m_entities.enable();
 		for(entity_system* sys : r2engine::systems) sys->initialize_entities();
 
-		auto ref = r2engine::instance->m_entities;
-		ref.enable();
-		for(scene_entity* entity : *ref->uninitializedEntities) {
+		for(scene_entity* entity : *m_entities->uninitializedEntities) {
 			entity->bind("wasInitialized");
 			entity->bind("handleEvent");
 			entity->bind("update");
@@ -246,17 +270,16 @@ namespace r2 {
 
 			if (!entity->parent()) this->add_child(entity);
 			entity->initialize();
-			ref->entities->push_front(entity);
+			m_entities->entities->push_front(entity);
 		}
-		ref->uninitializedEntities->clear();
-		ref.disable();
+		m_entities->uninitializedEntities->clear();
+		m_entities.disable();
 	}
 
 	void r2engine::update_entities(f32 dt) {
-		auto ref = r2engine::instance->m_entities;
-		ref.enable();
-		for(scene_entity* entity : *ref->entities) entity->update(dt);
-		ref.disable();
+		m_entities.enable();
+		for(scene_entity* entity : *m_entities->entities) entity->update(dt);
+		m_entities.disable();
 	}
 
     int r2engine::run() {

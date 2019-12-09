@@ -107,6 +107,8 @@ namespace r2 {
 	}
 
 	void scene_entity::destroy() {
+		m_destroyed = true;
+
 		if (!m_scriptObj.IsEmpty()) {
 			auto funcIter = m_scriptFuncs->find("willBeDestroyed");
 			if (funcIter != m_scriptFuncs->end()) {
@@ -119,15 +121,17 @@ namespace r2 {
 			}
 		}
 
+		r2engine::entity_destroyed(this);
+
+		stop_periodic_updates();
+		destroy_periodic_update();
+		destroy_event_receiver();
+
 		for(auto fpair : *m_scriptFuncs) {
 			fpair.second.Reset();
 		}
 		m_scriptFuncs->clear();
 
-		stop_periodic_updates();
-		destroy_periodic_update();
-
-		r2engine::entity_destroyed(this);
 		if (!m_scriptObj.IsEmpty()) {
 			m_scriptObj.Reset();
 			class_<scene_entity, raw_ptr_traits>::destroy_object(isolate, this);
@@ -152,6 +156,7 @@ namespace r2 {
 
 	void scene_entity::initialize() {
 		initialize_periodic_update();
+		initialize_event_receiver();
 		start_periodic_updates();
 
 		if (m_scriptObj.IsEmpty()) return;
@@ -331,7 +336,13 @@ namespace r2 {
 		auto fac = new entity_system_state_factory(this);
 		auto stateMgr = r2engine::get()->states();
 		m_state = stateMgr->register_state_data_factory<entity_system_state>(fac);
+		initialize_event_receiver();
 		initialize();
+	}
+
+	void entity_system::_deinitialize() {
+		destroy_event_receiver();
+		deinitialize();
 	}
 
 	void entity_system::_entity_added(scene_entity* entity) {

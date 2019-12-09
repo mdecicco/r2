@@ -1,6 +1,5 @@
-const {
-	ObjFile
-} = require('obj');
+const { ObjFile } = require('obj');
+const { Camera } = require('camera');
 
 function format_size(sz) {
 	let mult = 1.0;
@@ -42,6 +41,8 @@ class CameraTestState extends engine.State {
 		
 		info.node.material_instance = material.instantiate();
 		info.node.material_instance.uniforms.vec3f("color", new vec3f(0.75, 0.1, 0.2));
+		
+		const camera = new Camera();
 	}
 	render = () => {
 		ImGui.Text(`Memory: ${format_size(this.used_memory)} / ${format_size(this.max_memory)}`);

@@ -6,6 +6,8 @@ namespace r2 {
 		public:
 			transform_component();
 			~transform_component();
+
+			mat4f transform;
 	};
 
 	class transform_sys : public entity_system {
