@@ -56,6 +56,9 @@ namespace r2 {
             event_receiver(memory_allocator* memory = nullptr);
             virtual ~event_receiver();
 
+			void initialize_event_receiver();
+			void destroy_event_receiver();
+
             void add_child(event_receiver* child);
             void remove_child(event_receiver* child);
 
@@ -73,9 +76,10 @@ namespace r2 {
         private:
 			bool m_isAtFrameStart;
 			memory_allocator* m_memory;
-			mvector<event*> m_frameStartEvents;
-			mvector<event*> m_nextFrameStartEvents;
-            mlist<event_receiver*> m_children;
-			mlist<mstring> m_subscribesTo;
+			mvector<event*>* m_frameStartEvents;
+			mvector<event*>* m_nextFrameStartEvents;
+            mlist<event_receiver*>* m_children;
+			mlist<mstring>* m_subscribesTo;
+			event_receiver* m_parent;
     };
 }

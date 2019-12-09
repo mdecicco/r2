@@ -84,6 +84,7 @@ namespace r2 {
 		m_mgr->initialize_state_engine_data(this);
 
 		initialize_periodic_update();
+		initialize_event_receiver();
 		m_scene = r2engine::get()->scenes()->create((*m_name) + "_scene");
 
 		LocalObjectHandle self = convert<state*>::to_v8(isolate, this);
@@ -175,6 +176,8 @@ namespace r2 {
 			m_scene = nullptr;
 		}
 
+		r2engine::get()->destroy_all_entities();
+
 		if (m_engineData) {
 			for(auto data : *m_engineData) {
 				delete data;
@@ -183,6 +186,7 @@ namespace r2 {
 			m_engineData = nullptr;
 		}
 		destroy_periodic_update();
+		destroy_event_receiver();
 		if (m_name) { delete m_name; m_name = nullptr; }
 		deactivate_allocator(true);
 	}

@@ -51,19 +51,12 @@ namespace r2 {
 			script_man* scripts() const;
 			log_man* logs() const;
 			r2::window* window();
-
 			engine_state_data* get_engine_state_data(u16 factoryIdx);
 			scene* current_scene();
-
-			// functions for scripts
 			bool open_window(i32 w, i32 h, const mstring& title, bool can_resize = false, bool fullscreen = false);
-
-			// inherited functions
 			virtual void handle(event* evt);
-		  
-			// debug
-			void log(const mstring& pre,mstring msg,...);
-
+			void log(const mstring& pre, mstring msg,...);
+			void destroy_all_entities();
 
 			// loop functions
 			void initialize_new_entities();
