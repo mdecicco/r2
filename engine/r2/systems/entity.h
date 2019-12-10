@@ -64,9 +64,13 @@ namespace r2 {
 			// bind c++ function to entity object
 			bool bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args));
 			
-			template<typename T, typename U>
-			bool bind(scene_entity_component* component, const mstring& prop, U T::*member, bool readonly = false) {
+			template<typename T, typename U, typename C = U (*)(const U&, const U&)>
+			bool bind(scene_entity_component* component, const mstring& prop, U T::*member, bool readonly = false, bool cascades = false, C cascadeFunc = nullptr, const mstring& cascadedPropName = "") {
 				if (!ensure_object_handle()) return false;
+				if (cascades && !cascadeFunc) {
+					r2Error("Property \"%s\" was specified to be cascading, but no cascade function was specified. Property will not have cascaded get accessor", prop.c_str());
+					return false;
+				}
 
 				v8::Isolate* isolate = r2engine::isolate();
 
@@ -101,6 +105,26 @@ namespace r2 {
 
 				LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
 				obj->SetAccessorProperty(v8str(prop.c_str()), get, set, readonly ? v8::PropertyAttribute::ReadOnly : v8::PropertyAttribute::None);
+
+				if (cascades) {
+					get = v8pp::wrap_function(isolate, nullptr, [system, compId, member, cascadeFunc](v8Args args) {
+						v8::Isolate* isolate = args.GetIsolate();
+						auto state = system->state();
+						state.enable();
+						scene_entity_component* component = state->component(compId);
+						U result = component->cascaded_property<T, U>(member, cascadeFunc);
+						state.disable();
+						args.GetReturnValue().Set(v8pp::convert<U>::to_v8(isolate, result));
+					});
+
+					mstring name = cascadedPropName;
+					if (name.length() == 0) {
+						name = prop + "_cascaded";
+						r2Warn("No cascaded property name was specified for cascading property \"%s\". Using \"%s\"", prop.c_str(), name.c_str());
+					}
+					obj->SetAccessorProperty(v8str(name.c_str()), get, v8::Local<v8::Function>(), v8::PropertyAttribute::ReadOnly);
+				}
+				return true;
 			}
 
 			void unbind(const mstring& functionOrProp);
@@ -142,23 +166,6 @@ namespace r2 {
 			mstring* m_name;
 			entityId m_id;
 			bool m_destroyed;
-	};
-
-	class scene_entity_component {
-		public:
-			scene_entity_component();
-			~scene_entity_component();
-
-			static inline componentId nextId() { return nextComponentId; }
-
-			inline componentId id() const { return m_id; }
-			inline entity_system* system() const { return m_system; }
-
-		private:
-			friend class entity_system;
-			static componentId nextComponentId;
-			componentId m_id;
-			entity_system* m_system;
 	};
 
 	class entity_system_state : public engine_state_data {
@@ -246,4 +253,52 @@ namespace r2 {
 			void _entity_removed(scene_entity* entity);
 			void initialize_entities();
 	};
+
+	class scene_entity_component {
+		public:
+			scene_entity_component();
+			~scene_entity_component();
+
+			static inline componentId nextId() { return nextComponentId; }
+
+			inline componentId id() const { return m_id; }
+			inline entity_system* system() const { return m_system; }
+
+
+			/* For getting properties that are relative to the parent's same property,
+			 * if one exists. Takes a pointer to the component property, and a cascade
+			 * function.
+			 *
+			 * example:
+			 * using c = transform_component;
+			 * cascaded_property(&c::transform, [](const mat4f& parent, const mat4f& child) { return parent * child; });
+			 */
+			template <typename T, typename U, typename C>
+			U cascaded_property(U T::*member, C cascade) {
+				size_t offset = (char*)&((T*)nullptr->*member) - (char*)nullptr;
+				U& thisProp = *(U*)(((u8*)this) + offset);
+				scene_entity* parent = m_entity->parent();
+				if (parent) {
+					auto state = m_system->state();
+					state.enable();
+					if (!state->contains_entity(parent->id())) {
+						state.disable();
+						return thisProp;
+					}
+					auto parentComp = state->entity(parent->id());
+					U parentProp = parentComp->cascaded_property<T, U, C>(member, cascade);
+					state.disable();
+					return cascade(parentProp, thisProp);
+				}
+				return thisProp;
+			}
+
+		private:
+			friend class entity_system;
+			static componentId nextComponentId;
+
+			componentId m_id;
+			entity_system* m_system;
+			scene_entity* m_entity;
+		};
 };

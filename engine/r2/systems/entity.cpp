@@ -46,6 +46,9 @@ namespace r2 {
 
 		m_scriptFuncs = new munordered_map<mstring, PersistentFunctionHandle>();
 		m_children = new mlist<scene_entity*>();
+
+		initialize_periodic_update();
+		initialize_event_receiver();
 		r2engine::entity_created(this);
 	}
 
@@ -172,8 +175,6 @@ namespace r2 {
 	}
 
 	void scene_entity::initialize() {
-		initialize_periodic_update();
-		initialize_event_receiver();
 		start_periodic_updates();
 
 		if (m_scriptObj.IsEmpty()) return;
@@ -337,6 +338,7 @@ namespace r2 {
 		}
 		scene_entity_component* comp = create_component(entity->id());
 		comp->m_system = this;
+		comp->m_entity = entity;
 		bind(comp, entity);
 		m_state.disable();
 	}

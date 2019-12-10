@@ -3,6 +3,7 @@
 
 #include <r2/systems/camera_sys.h>
 #include <r2/systems/transform_sys.h>
+#include <r2/systems/cascade_functions.h>
 
 namespace r2 {
     // render node
@@ -231,7 +232,9 @@ namespace r2 {
 		if (camera && camera->camera) {
 			mat4f proj = camera->camera->projection;
 			mat4f view = mat4f(1.0f);
-			if (camera->transform) view = camera->transform->transform;
+			if (camera->transform) {
+				view = camera->transform->cascaded_property(&transform_component::transform, &cascade_mat4f);
+			}
 
 			m_sceneUniforms->uniform_mat4f("transform", view);
 			m_sceneUniforms->uniform_mat4f("projection", proj);

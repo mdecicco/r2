@@ -1,5 +1,6 @@
 #include <r2/engine.h>
 #include <r2/systems/transform_sys.h>
+#include <r2/systems/cascade_functions.h>
 
 namespace r2 {
 	transform_component::transform_component() : transform(mat4f(1.0f)) {
@@ -38,7 +39,7 @@ namespace r2 {
 	void transform_sys::bind(scene_entity_component* component, scene_entity* entity) {
 		using c = transform_component;
 		entity->unbind("add_transform_component");
-		entity->bind(component, "transform", &c::transform);
+		entity->bind(component, "transform", &c::transform, false, true, &cascade_mat4f, "full_transform");
 		entity->transform = component_ref<transform_component*>(this, component->id());
 		entity->bind(this, "remove_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->removeComponentFrom(entity);
