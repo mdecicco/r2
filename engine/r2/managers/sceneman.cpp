@@ -1,6 +1,9 @@
 #include <r2/engine.h>
 #include <r2/managers/renderman.h>
 
+#include <r2/systems/camera_sys.h>
+#include <r2/systems/transform_sys.h>
+
 namespace r2 {
     // render node
     render_node::render_node(const vtx_bo_segment& vertData, mesh_construction_data* cdata, idx_bo_segment* indexData, ins_bo_segment* instanceData) {
@@ -93,6 +96,8 @@ namespace r2 {
 
     // scene
     scene::scene(scene_man* m,const mstring& name) {
+		camera = nullptr;
+
         m_mgr = m;
         m_name = name;
 		m_sceneUniforms = allocate_uniform_block("u_scene", static_uniform_formats::scene());
@@ -223,17 +228,15 @@ namespace r2 {
 
 		// TODO: Optimize
 
-		auto win = r2engine::get()->window();
+		if (camera && camera->camera) {
+			mat4f proj = camera->camera->projection;
+			mat4f view = mat4f(1.0f);
+			if (camera->transform) view = camera->transform->transform;
 
-		f32 x = glm::radians(win->elapsed() * 10);
-
-		vec2i res = win->get_size();
-		mat4f view = glm::lookAt(vec3f(sin(x) * 10, sin(x * 0.25f) * 10, cos(x) * 10), vec3f(0, 0, 0), vec3f(0, 1, 0));
-		mat4f proj = glm::perspectiveFov(glm::radians(60.0f), f32(res.x), f32(res.y), 0.001f, 1000.0f);
-
-		m_sceneUniforms->uniform_mat4f("transform", view);
-		m_sceneUniforms->uniform_mat4f("projection", proj);
-		m_sceneUniforms->uniform_mat4f("view_proj", proj * view);
+			m_sceneUniforms->uniform_mat4f("transform", view);
+			m_sceneUniforms->uniform_mat4f("projection", proj);
+			m_sceneUniforms->uniform_mat4f("view_proj", proj * view);
+		}
 
 		generate_vaos();
 		sync_buffers();

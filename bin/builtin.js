@@ -679,13 +679,13 @@ var Transform2D = {
 };
 
 var View = {
-    lookAt: (eye, center, up) => { const out = new mat4f(); _glMatrix._mat4.lookAt(eye.__arr, center.__arr, up.__arr); return out; }
+    lookAt: (eye, center, up) => { const out = new mat4f(); _glMatrix._mat4.lookAt(out.__arr, eye.__arr, center.__arr, up.__arr); return out; }
 };
 
 var Projection = {
     frustum: (left, right, bottom, top, near, far) => { const out = new mat4f(); _glMatrix._mat4.frustum(out.__arr, left, right, bottom, top, near, far); return out; },
     ortho: (left, right, bottom, top, near, far) => { const out = new mat4f(); _glMatrix._mat4.ortho(out.__arr, left, right, bottom, top, near, far); return out; },
-    perspective: (fov, aspect, near, far) => { const out = mat4f(); _glMatrix._mat4.perspective(out.__arr, fov * DEG_TO_RAD, aspect, near, far); return out; },
+    perspective: (fov, aspect, near, far) => { const out = new mat4f(); _glMatrix._mat4.perspective(out.__arr, fov * DEG_TO_RAD, aspect, near, far); return out; },
     perspectiveFromFieldOfView: (fovUp, fovDown, fovLeft, fovRight, near, far) => {
         const out = mat4f();
         // this function actually does use degrees, for some reason.

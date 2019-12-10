@@ -21,14 +21,17 @@ namespace r2 {
 		});
 	}
 	void transform_sys::deinitialize_entity(scene_entity* entity) {
-		state().enable();
-		if (!state()->contains_entity(entity->id())) entity->unbind("add_transform_component");
+		auto s = state();
+		s.enable();
+		if (!s->contains_entity(entity->id())) entity->unbind("add_transform_component");
+		s.disable();
 	}
 
 	scene_entity_component* transform_sys::create_component(entityId id) {
-		state().enable();
-		auto out = state()->create<transform_component>(id);
-		state().disable();
+		auto s = state();
+		s.enable();
+		auto out = s->create<transform_component>(id);
+		s.disable();
 		return out;
 	}
 
@@ -36,6 +39,7 @@ namespace r2 {
 		using c = transform_component;
 		entity->unbind("add_transform_component");
 		entity->bind(component, "transform", &c::transform);
+		entity->transform = component_ref<transform_component*>(this, component->id());
 		entity->bind(this, "remove_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->removeComponentFrom(entity);
 		});
@@ -45,6 +49,7 @@ namespace r2 {
 		entity->bind(this, "add_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->addComponentTo(entity);
 		});
+		entity->transform.clear();
 	}
 
 	void transform_sys::initialize() {

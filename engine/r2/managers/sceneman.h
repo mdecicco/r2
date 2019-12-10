@@ -1,4 +1,5 @@
 #pragma once
+#include <r2/systems/entity.h>
 
 #include <r2/managers/memman.h>
 #include <r2/bindings/v8helpers.h>
@@ -101,6 +102,8 @@ namespace r2 {
 			void render();
 
 			void release_resources();
+
+			scene_entity* camera;
 
         protected:
             friend class scene_man;

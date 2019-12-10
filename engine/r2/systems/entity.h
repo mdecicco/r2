@@ -13,6 +13,42 @@ namespace r2 {
 
 	class entity_system;
 	class scene_entity_component;
+
+	bool __component_exists(entity_system* sys, componentId id);
+	scene_entity_component* __get_component(entity_system* sys, componentId id);
+
+	template <typename component_ptr_type>
+	class component_ref {
+		public:
+			component_ref() : id(0), sys(nullptr) { }
+			component_ref(const component_ref& o) : id(o.id), sys(o.sys) { }
+			component_ref(entity_system* _sys, componentId _id) : sys(_sys), id(_id) { }
+			~component_ref() { id = 0; sys = nullptr; }
+
+			operator bool() {
+				if (id == 0 || !sys) return false;
+				return __component_exists(sys, id);
+			}
+
+			component_ptr_type operator->() {
+				return (component_ptr_type)__get_component(sys, id);
+			}
+
+			void clear() {
+				id = 0;
+				sys = nullptr;
+			}
+
+		protected:
+			friend class entity_system;
+
+			componentId id;
+			entity_system* sys;
+	};
+
+	class transform_component;
+	class camera_component;
+
 	class scene_entity : public event_receiver, public periodic_update {
 		public:
 			scene_entity(v8Args args);
@@ -90,6 +126,9 @@ namespace r2 {
 			void remove_child_entity(scene_entity* entity);
 			inline scene_entity* parent() const { return m_parent; }
 
+			component_ref<transform_component*> transform;
+			component_ref<camera_component*> camera;
+
 		private:
 			bool ensure_object_handle();
 
@@ -140,10 +179,17 @@ namespace r2 {
 
 			bool contains_entity(entityId id);
 
+			bool contains_component(componentId id);
+
 			void destroy(entityId forEntity);
 
 			template <typename T>
 			void for_each(void (*callback)(T*)) {
+				m_components->for_each<T>(callback);
+			}
+
+			template <typename T>
+			void for_each(void (*callback)(T*, size_t, bool&)) {
 				m_components->for_each<T>(callback);
 			}
 

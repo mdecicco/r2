@@ -2,20 +2,21 @@
 #include <r2/systems/entity.h>
 
 namespace r2 {
-	class transform_component : public scene_entity_component {
+	class camera_component : public scene_entity_component {
 		public:
-			transform_component();
-			~transform_component();
+			camera_component();
+			~camera_component();
 
-			mat4f transform;
+			mat4f projection;
+			bool active;
 	};
 
-	class transform_sys : public entity_system {
+	class camera_sys : public entity_system {
 		public:
-			transform_sys();
-			~transform_sys();
+			camera_sys();
+			~camera_sys();
 
-			virtual const size_t component_size() const { return sizeof(transform_component); }
+			virtual const size_t component_size() const { return sizeof(camera_component); }
 
 			virtual void initialize();
 			virtual void initialize_entity(scene_entity* entity);
