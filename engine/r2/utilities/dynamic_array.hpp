@@ -135,6 +135,10 @@ namespace r2 {
 				return m_values.at<T>(m_offsets[key]);
 			}
 
+			bool has(const K& key) {
+				return m_offsets.count(key) > 0;
+			}
+
 			void remove(const K& key) {
 				size_t idx = m_offsets[key];
 				m_offsets.erase(key);
@@ -242,6 +246,10 @@ namespace r2 {
 
 			T* get(const K& key) {
 				return m_values.at(m_offsets[key]);
+			}
+
+			bool has(const K& key) {
+				return m_offsets.count(key) > 0;
 			}
 
 			void remove(const K& key) {

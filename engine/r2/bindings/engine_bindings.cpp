@@ -165,6 +165,10 @@ namespace r2 {
 		args.GetReturnValue().Set(engine->open_window(v_width, v_height, v_title, v_can_resize, v_fullscreen));
 	}
 
+	vec2i window_size() {
+		return r2engine::get()->window()->get_size();
+	}
+
 	void register_state(state* s) {
 		r2engine::get()->states()->register_state(s);
 	}
@@ -226,6 +230,7 @@ namespace r2 {
 		m.set("dispatch", &dispatch);
 		m.set("logs", &logs);
 		m.set("open_window", &open_window);
+		m.set("window_size", &window_size);
 		m.set("register_state", &register_state);
 		m.set("activate_state", &activate_state);
 

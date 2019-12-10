@@ -5,6 +5,23 @@ using namespace v8;
 using namespace v8pp;
 
 namespace r2 {
+	bool __component_exists(entity_system* sys, componentId id) {
+		auto state = sys->state();
+		state.enable();
+		bool valid = state->contains_component(id);
+		state.disable();
+		return valid;
+	}
+
+	scene_entity_component* __get_component(entity_system* sys, componentId id) {
+		auto state = sys->state();
+		state.enable();
+		auto comp = state->component(id);
+		state.disable();
+		return comp;
+	}
+
+
 	entityId scene_entity::nextEntityId = 1;
 	scene_entity::scene_entity(v8Args args)
 		: m_id(scene_entity::nextEntityId++), m_name(nullptr), m_scriptFuncs(nullptr), m_destroyed(false), m_parent(nullptr), m_children(nullptr) {
@@ -29,6 +46,9 @@ namespace r2 {
 
 		m_scriptFuncs = new munordered_map<mstring, PersistentFunctionHandle>();
 		m_children = new mlist<scene_entity*>();
+
+		initialize_periodic_update();
+		initialize_event_receiver();
 		r2engine::entity_created(this);
 	}
 
@@ -155,8 +175,6 @@ namespace r2 {
 	}
 
 	void scene_entity::initialize() {
-		initialize_periodic_update();
-		initialize_event_receiver();
 		start_periodic_updates();
 
 		if (m_scriptObj.IsEmpty()) return;
@@ -279,6 +297,10 @@ namespace r2 {
 		return m_entityComponentIds->count(id) > 0;
 	}
 
+	bool entity_system_state::contains_component(componentId id) {
+		return m_components->has(id);
+	}
+
 	void entity_system_state::destroy(entityId forEntity) {
 		auto ecomp = m_entityComponentIds->find(forEntity);
 		if (ecomp == m_entityComponentIds->end()) {
@@ -316,6 +338,7 @@ namespace r2 {
 		}
 		scene_entity_component* comp = create_component(entity->id());
 		comp->m_system = this;
+		comp->m_entity = entity;
 		bind(comp, entity);
 		m_state.disable();
 	}
@@ -365,9 +388,8 @@ namespace r2 {
 			m_state->destroy(entity->id());
 		}
 
-		m_state.disable();
-
 		deinitialize_entity(entity);
+		m_state.disable();
 	}
 
 	void entity_system::initialize_entities() {
