@@ -96,6 +96,17 @@ namespace r2 {
 		LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
 		return obj->Set(v8str(function.c_str()), wrap_function(isolate, function.c_str(), func));
 	}
+
+	bool scene_entity::bind(scene_entity_component* component, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set, v8::PropertyAttribute attribute) {
+		if (!ensure_object_handle()) return false;
+
+		v8::Isolate* isolate = r2engine::isolate();
+
+		LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+		obj->SetAccessorProperty(v8str(prop.c_str()), get, set, attribute);
+
+		return true;
+	}
 	
 	bool scene_entity::ensure_object_handle() {
 		if (m_scriptObj.IsEmpty()) {

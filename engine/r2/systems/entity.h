@@ -48,6 +48,7 @@ namespace r2 {
 
 	class transform_component;
 	class camera_component;
+	class mesh_component;
 
 	class scene_entity : public event_receiver, public periodic_update {
 		public:
@@ -64,6 +65,8 @@ namespace r2 {
 			// bind c++ function to entity object
 			bool bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args));
 			
+			bool bind(scene_entity_component* component, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set = v8::Local<v8::Function>(), v8::PropertyAttribute attribute = v8::PropertyAttribute::None);
+
 			template<typename T, typename U, typename C = U (*)(const U&, const U&)>
 			bool bind(scene_entity_component* component, const mstring& prop, U T::*member, bool readonly = false, bool cascades = false, C cascadeFunc = nullptr, const mstring& cascadedPropName = "") {
 				if (!ensure_object_handle()) return false;
@@ -152,6 +155,7 @@ namespace r2 {
 
 			component_ref<transform_component*> transform;
 			component_ref<camera_component*> camera;
+			component_ref<mesh_component*> mesh;
 
 		private:
 			bool ensure_object_handle();
