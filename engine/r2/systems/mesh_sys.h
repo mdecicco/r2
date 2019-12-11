@@ -10,8 +10,16 @@ namespace r2 {
 
 			void set_node(render_node* node);
 			render_node* get_node();
-			void set_data(v8Args args);
-			void get_data(v8Args args);
+			void set_instance_data(v8Args args);
+			void get_instance_data(v8Args args);
+			void get_max_vertex_count(v8Args args);
+			void get_vertex_count(v8Args args);
+			void set_vertex_data(v8Args args);
+			void get_vertex_data(v8Args args);
+			void get_max_index_count(v8Args args);
+			void get_index_count(v8Args args);
+			void set_index_data(v8Args args);
+			void get_index_data(v8Args args);
 
 		protected:
 			render_node_instance m_instance;
@@ -32,5 +40,10 @@ namespace r2 {
 			virtual void unbind(scene_entity* entity);
 			virtual void tick(f32 dt);
 			virtual void handle(event* evt);
+
+			void bind_instance_data(mesh_component* component, scene_entity* entity);
+			void bind_vertex_data(mesh_component* component, scene_entity* entity);
+			void bind_index_data(mesh_component* component, scene_entity* entity);
+			void bind_node(mesh_component* component, scene_entity* entity);
 	};
 };

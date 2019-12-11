@@ -185,6 +185,21 @@ namespace r2 {
 			r2Error("Attempted to update invalid segment of uniform buffer. Ignoring");
 			return;
 		}
+		if (seg.buffer != this) {
+			r2Error("Segment for another uniform buffer passed to uniform_buffer::update");
+			return;
+		}
+
+		if (seg.memBegin > m_format->size() * m_uniformCount) {
+			r2Error("Out of range segment.memBegin (%llu) provided to uniform_buffer::update", seg.memBegin);
+			return;
+		}
+
+		if (seg.memEnd > m_format->size() * m_uniformCount) {
+			r2Error("Out of range segment.memEnd (%llu) provided to uniform_buffer::update", seg.memEnd);
+			return;
+		}
+
 		memcpy((u8*)m_data + seg.memBegin, data, seg.memsize());
 		updated(seg.memBegin, seg.memEnd);
 	}

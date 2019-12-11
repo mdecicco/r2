@@ -356,19 +356,21 @@ namespace r2 {
 		if (ebo) {
 			glCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_id));
 
+			size_t index_count = node->index_count(); // eseg.size() = capacity of the buffer
 			if (ibo) {
-				size_t instance_count = node->instance_count(); //iseg.size()
-				glCall(glDrawElementsInstanced(GL_TRIANGLES, eseg.size(), index_component_types[ebo->type()], (void*)eseg.memBegin, instance_count));
+				size_t instance_count = node->instance_count(); //iseg.size() = capacity of the buffer
+				glCall(glDrawElementsInstanced(GL_TRIANGLES, index_count, index_component_types[ebo->type()], (void*)eseg.memBegin, instance_count));
 			} else {
-				glCall(glDrawElements(GL_TRIANGLES, eseg.size(), index_component_types[ebo->type()], (void*)eseg.memBegin));
+				glCall(glDrawElements(GL_TRIANGLES, index_count, index_component_types[ebo->type()], (void*)eseg.memBegin));
 			}
 			glCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 		} else {
+			size_t vertex_count = node->vertex_count(); // vseg.size() = capacity of the buffer
 			if (ibo) {
-				size_t instance_count = node->instance_count(); //iseg.size()
-				glCall(glDrawArraysInstanced(GL_TRIANGLES, vseg.begin, vseg.size(), instance_count));
+				size_t instance_count = node->instance_count(); //iseg.size() = capacity of the buffer
+				glCall(glDrawArraysInstanced(GL_TRIANGLES, vseg.begin, vertex_count, instance_count));
 			} else {
-				glCall(glDrawArrays(GL_TRIANGLES, vseg.begin, vseg.size()));
+				glCall(glDrawArrays(GL_TRIANGLES, vseg.begin, vertex_count));
 			}
 		}
 

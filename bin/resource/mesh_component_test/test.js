@@ -12,12 +12,18 @@ function format_size(sz) {
 	return `${(sz * mult).toFixed(2)} ${unit}`;
 }
 
-class CameraTestState extends engine.State {
+class MeshTestState extends engine.State {
 	constructor () {
-		super("CameraTestState", Memory.Megabytes(16));
+		super("MeshTestState", Memory.Megabytes(16));
 	}
 	willBecomeActive = () => { }
 	becameActive = () => {
+		// to do:
+		// integrate assimp and expose mesh loading functions c++ side
+		// maybe make require()ing an object return a function to produce a render
+		// node with a specified vertex format, and optional instance format, index
+		// type, max instance count.
+		
 		// load mesh and make renderable
 		
 		const o = new ObjFile("teapot.obj");
@@ -48,7 +54,7 @@ class CameraTestState extends engine.State {
 	render = () => {
 		ImGui.Text(`Memory: ${format_size(this.used_memory)} / ${format_size(this.max_memory)}`);
 		if (ImGui.Button('Reset State', { w: 190, h: 20 })) {
-			engine.activate_state("CameraTestState");
+			engine.activate_state("MeshTestState");
 		}
 	}
 	update = () => {
@@ -56,7 +62,7 @@ class CameraTestState extends engine.State {
 	}
 	willBecomeInactive = () => { }
 	becameInactive = () => { }
-	willBeDestroyed = () => { engine.log("CameraTestState destroyed"); }
+	willBeDestroyed = () => { engine.log("MeshTestState destroyed"); }
 };
 
 engine.open_window({
@@ -67,6 +73,6 @@ engine.open_window({
 });
 gfx.set_driver(gfx.RenderDriver.OpenGL);
 
-var state = new CameraTestState();
+var state = new MeshTestState();
 engine.register_state(state);
-engine.activate_state("CameraTestState");
+engine.activate_state("MeshTestState");

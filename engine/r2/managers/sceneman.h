@@ -23,18 +23,40 @@ namespace r2 {
 
 			void release();
 			operator bool() const;
-			void update_raw(const void* data);
+			void update_instance_raw(const void* data);
+			void update_vertices_raw(const void* data, size_t count);
+			void update_indices_raw(const void* data, size_t count);
 			inline render_node* node() { return m_node; }
 			inline instanceId id() const { return m_id; }
 
 			template <typename T>
-			void update(const T& data) {
+			void update_instance(const T& data) {
 				if (!m_node) {
 					r2Error("Invalid render_node_instance cannot be updated");
 					return;
 				}
 				assert(sizeof(T) == m_node->instances().buffer->format()->size());
-				update_raw(&data);
+				update_instance_raw(&data);
+			}
+
+			template <typename T>
+			void update_vertices(const T* data, size_t count) {
+				if (!m_node) {
+					r2Error("Invalid render_node_instance cannot be updated");
+					return;
+				}
+				assert(sizeof(T) == m_node->vertices().buffer->format()->size());
+				update_vertices_raw(data, count);
+			}
+
+			template <typename T>
+			void update_indices(const T* data, size_t count) {
+				if (!m_node) {
+					r2Error("Invalid render_node_instance cannot be updated");
+					return;
+				}
+				assert(sizeof(T) == m_node->indices().buffer->type());
+				update_indices_raw(data, count);
 			}
 
 		protected:
@@ -61,13 +83,29 @@ namespace r2 {
 			render_node_instance instantiate();
 			void release(instanceId id);
 			void update_instance_raw(instanceId id, const void* data);
+			void update_vertices_raw(instanceId id, const void* data, size_t count);
+			void update_indices_raw(instanceId id, const void* data, size_t count);
 			bool instance_valid(instanceId id) const;
 			inline size_t instance_count() const { return m_nextInstanceIdx; }
+			inline size_t vertex_count() const { return m_vertexCount; }
+			inline size_t index_count() const { return m_indexCount; }
 
 			template <typename T>
 			void update_instance(instanceId id, const T& data) {
 				assert(sizeof(T) == m_instanceData.buffer->format()->size());
 				update_instance_raw(id, &data);
+			}
+
+			template <typename T>
+			void update_vertices(instanceId id, const T* data, size_t count) {
+				assert(sizeof(T) == m_vertexData.buffer->format()->size());
+				update_vertices_raw(id, data, size_t count);
+			}
+
+			template <typename T>
+			void update_indices(instanceId id, const T* data, size_t count) {
+				assert(sizeof(T) == m_indexData.buffer->type());
+				update_indices_raw(id, data, size_t count);
 			}
 
         protected:
@@ -79,6 +117,8 @@ namespace r2 {
             ins_bo_segment m_instanceData;
 			mesh_construction_data* m_constructionData;
 			size_t m_nextInstanceIdx;
+			size_t m_vertexCount;
+			size_t m_indexCount;
 			munordered_map<instanceId, size_t> m_instanceIndices;
     };
 
