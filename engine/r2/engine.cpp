@@ -3,6 +3,7 @@
 
 #include <r2/systems/transform_sys.h>
 #include <r2/systems/camera_sys.h>
+#include <r2/systems/mesh_sys.h>
 
 namespace r2 {
 	r2engine* r2engine::instance = nullptr;
@@ -81,6 +82,7 @@ namespace r2 {
 
 		r2engine::register_system(new transform_sys());
 		r2engine::register_system(new camera_sys());
+		r2engine::register_system(new mesh_sys());
 
 		logMgr = new log_man();
 		instance = new r2engine(argc, argv);

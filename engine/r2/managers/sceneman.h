@@ -13,6 +13,38 @@
 #define DEFAULT_MAX_UNIFORM_BLOCKS	16384
 
 namespace r2 {
+	typedef size_t instanceId;
+	class render_node;
+	class render_node_instance {
+		public:
+			render_node_instance();
+			render_node_instance(const render_node_instance& o);
+			~render_node_instance();
+
+			void release();
+			operator bool() const;
+			void update_raw(const void* data);
+			inline render_node* node() { return m_node; }
+			inline instanceId id() const { return m_id; }
+
+			template <typename T>
+			void update(const T& data) {
+				if (!m_node) {
+					r2Error("Invalid render_node_instance cannot be updated");
+					return;
+				}
+				assert(sizeof(T) == m_node->instances().buffer->format()->size());
+				update_raw(&data);
+			}
+
+		protected:
+			friend class render_node;
+			static instanceId nextInstanceId;
+			render_node_instance(render_node* node);
+			instanceId m_id;
+			render_node* m_node;
+	};
+
 	class node_material_instance;
     class render_node {
         public:
@@ -26,6 +58,18 @@ namespace r2 {
 			void set_material_instance(node_material_instance* material);
 			node_material_instance* material_instance() const;
 
+			render_node_instance instantiate();
+			void release(instanceId id);
+			void update_instance_raw(instanceId id, const void* data);
+			bool instance_valid(instanceId id) const;
+			inline size_t instance_count() const { return m_nextInstanceIdx; }
+
+			template <typename T>
+			void update_instance(instanceId id, const T& data) {
+				assert(sizeof(T) == m_instanceData.buffer->format()->size());
+				update_instance_raw(id, &data);
+			}
+
         protected:
 			friend class scene;
 			uniform_block* m_uniforms;
@@ -34,6 +78,8 @@ namespace r2 {
             idx_bo_segment m_indexData;
             ins_bo_segment m_instanceData;
 			mesh_construction_data* m_constructionData;
+			size_t m_nextInstanceIdx;
+			munordered_map<instanceId, size_t> m_instanceIndices;
     };
 
 	class shader_program;

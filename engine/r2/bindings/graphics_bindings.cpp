@@ -97,7 +97,7 @@ namespace r2 {
 
 		return true;
 	}
-
+	
 	bool parse_instance(Local<Object>& obj, instance_format* fmt, void* dest) {
 		Isolate* isolate = obj->GetIsolate();
 		auto properties = obj->GetPropertyNames(isolate->GetCurrentContext());
@@ -267,7 +267,7 @@ namespace r2 {
 
 	void mesh_construction_data::append_instances_v8(v8Args args) {
 		if (!m_instanceFormat) {
-			r2Error("MeshInfo does not have an vertex format set, you can't append vertices to it");
+			r2Error("MeshInfo does not have an instance format set, you can't append instances to it");
 			return;
 		}
 

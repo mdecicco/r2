@@ -6,11 +6,39 @@
 #include <r2/systems/cascade_functions.h>
 
 namespace r2 {
+	// render node instance
+	instanceId render_node_instance::nextInstanceId = 1;
+	render_node_instance::render_node_instance() : m_node(nullptr), m_id(-1) { }
+	render_node_instance::render_node_instance(const render_node_instance& o) : m_node(o.m_node), m_id(o.m_id) { }
+	render_node_instance::render_node_instance(render_node* node) : m_node(node), m_id(render_node_instance::nextInstanceId++) { }
+	render_node_instance::~render_node_instance() { }
+
+
+	void render_node_instance::release() {
+		if (m_node) m_node->release(*this);
+	}
+
+	render_node_instance::operator bool() const {
+		return m_node && m_node->instance_valid(m_id);
+	}
+
+	void render_node_instance::update_raw(const void* data) {
+		if (!m_node) {
+			r2Error("Invalid render_node_instance cannot be updated");
+			return;
+		}
+
+		m_node->update_instance_raw(m_id, data);
+	}
+
+
+
     // render node
     render_node::render_node(const vtx_bo_segment& vertData, mesh_construction_data* cdata, idx_bo_segment* indexData, ins_bo_segment* instanceData) {
         m_vertexData = vertData;
 		m_constructionData = cdata;
 		m_material = nullptr;
+		m_nextInstanceIdx = 0;
 
         if(indexData) m_indexData = idx_bo_segment(*indexData);
         if(instanceData) m_instanceData = ins_bo_segment(*instanceData);
@@ -39,6 +67,55 @@ namespace r2 {
 
 	node_material_instance* render_node::material_instance() const {
 		return m_material;
+	}
+
+	render_node_instance render_node::instantiate() {
+		size_t remainingSlots = m_instanceData.size() - m_nextInstanceIdx;
+		if (remainingSlots == 0) {
+			r2Error("No more instances can fit in the instance buffer (buf: %llu)", m_instanceData.buffer->id());
+			return render_node_instance();
+		}
+
+		render_node_instance out(this);
+		m_instanceIndices[out.id()] = m_nextInstanceIdx++;
+		return out;
+	}
+
+	void render_node::release(instanceId id) {
+		auto i = m_instanceIndices.find(id);
+		if (i == m_instanceIndices.end()) {
+			r2Error("render_node_instance %llu is invalid and cannot be released", id);
+			return;
+		}
+
+		// don't allow gaps in instance indices
+		// they should always remain sequential
+		size_t idx = i->second;
+		for(auto instance : m_instanceIndices) {
+			if (instance.second > idx) m_instanceIndices[instance.first]--;
+		}
+
+		m_nextInstanceIdx--;
+		m_instanceIndices.erase(i);
+	}
+
+	void render_node::update_instance_raw(instanceId id, const void* data) {
+		auto i = m_instanceIndices.find(id);
+		if (i == m_instanceIndices.end()) {
+			r2Error("render_node_instance %llu is invalid and cannot be updated", id);
+			return;
+		}
+
+		size_t idx = i->second;
+		size_t instanceSize = m_instanceData.buffer->format()->size();
+		size_t memBegin = idx * instanceSize;
+		size_t memEnd = memBegin + instanceSize;
+		ins_bo_segment seg = m_instanceData.sub(idx, idx + 1, memBegin, memEnd);
+		m_instanceData.buffer->update(seg, data);
+	}
+	
+	bool render_node::instance_valid(instanceId id) const {
+		return m_instanceIndices.find(id) != m_instanceIndices.end();
 	}
 
 

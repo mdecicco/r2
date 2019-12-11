@@ -98,7 +98,7 @@ class vec4 {
     round() { _glMatrix._vec4.round(this.__arr, this.__arr); return this; }
     scaled(fac) { const out = __c(this); _glMatrix._vec4.scale(out.__arr, this.__arr, fac); return out; }
     scale(fac) { _glMatrix._vec4.scale(this.__arr, this.__arr, fac); return this; }
-    toString() { return `${this.__arr[0]}, ${this.__arr[1]}, ${this.__arr[2]}, ${this.__arr[3]}`; }
+    toString(digits = 2) { return `${this.__arr[0].toFixed(digits)}, ${this.__arr[1].toFixed(digits)}, ${this.__arr[2].toFixed(digits)}, ${this.__arr[3].toFixed(digits)}`; }
     
     static cross(a, b, c) { const out = __c(a); _glMatrix._vec4.cross(out.__arr, a.__arr, b.__arr, c.__arr); return out; }
     static lerp(a, b, t) { const out = __c(a); _glMatrix._vec4.lerp(out.__arr, a.__arr, b.__arr, t); return out; }
@@ -218,7 +218,7 @@ class vec3 {
     round() { _glMatrix._vec3.round(this.__arr, this.__arr); return this; }
     scaled(fac) { const out = __c(this); _glMatrix._vec3.scale(out.__arr, this.__arr, fac); return out; }
     scale(fac) { _glMatrix._vec3.scale(this.__arr, this.__arr, fac); return this; }
-    toString() { return `${this.__arr[0]}, ${this.__arr[1]}, ${this.__arr[2]}`; }
+    toString(digits = 2) { return `${this.__arr[0].toFixed(digits)}, ${this.__arr[1].toFixed(digits)}, ${this.__arr[2].toFixed(digits)}`; }
     
     static cross(a, b) { const out = __c(a); _glMatrix._vec3.cross(out.__arr, a.__arr, b.__arr); return out; }
     static angle(a, b) { _glMatrix._vec3.angle(out.__arr, a.__arr, b.__arr); }
@@ -312,7 +312,7 @@ class vec2 {
     round() { _glMatrix._vec2.round(this.__arr, this.__arr); return this; }
     scaled(fac) { const out = __c(this); _glMatrix._vec2.scale(out.__arr, this.__arr, fac); return out; }
     scale(fac) { _glMatrix._vec2.scale(this.__arr, this.__arr, fac); return this; }
-    toString() { return `${this.__arr[0]}, ${this.__arr[1]}`; }
+    toString(digits = 2) { return `${this.__arr[0].toFixed(digits)}, ${this.__arr[1].toFixed(digits)}`; }
     
     static cross(a, b) { const out = __c(a); _glMatrix._vec2.cross(out.__arr, a.__arr, b.__arr); return out; }
     static angle(a, b) { _glMatrix._vec2.angle(out.__arr, a.__arr, b.__arr); }
@@ -392,7 +392,7 @@ class quat {
     static angle(a, b) { return _glMatrix._quat.angle(a.__arr, b.__arr) * RAD_TO_DEG; }
     static random() { const out = new quat(); _glMatrix._quat.random(out.__arr); return out; }
     
-    toString() { const { axis, angle } = this.toAxisAngle(); return `axis: ${axis.x.toFixed(2)}, ${axis.y.toFixed(2)}, ${axis.z.toFixed(2)} angle: ${angle.toFixed(2)}`; }
+    toString(digits = 2) { const { axis, angle } = this.toAxisAngle(); return `axis: ${axis.x.toFixed(digits)}, ${axis.y.toFixed(digits)}, ${axis.z.toFixed(digits)} angle: ${angle.toFixed(digits)}`; }
     
     get length() { return _glMatrix._quat.length(this.__arr); }
     get squaredLength() { return _glMatrix._quat.squaredLength(this.__arr); }
@@ -448,11 +448,11 @@ class mat4 {
     getTranslation() { const out = new vec3(__new_arr(this, 3)); _glMatrix._mat4.getTranslation(out.__arr, this.__arr); return out; }
     getNormalMatrix() { const out = new mat3(__new_arr(this, 9)); _glMatrix._mat3.normalFromMat4(out.__arr, this.__arr); return out; }
     
-    toString() {
-        return `${this.__arr[ 0]}, ${this.__arr[ 1]}, ${this.__arr[ 2]}, ${this.__arr[ 3]}\n` +
-               `${this.__arr[ 4]}, ${this.__arr[ 5]}, ${this.__arr[ 6]}, ${this.__arr[ 7]}\n` +
-               `${this.__arr[ 8]}, ${this.__arr[ 9]}, ${this.__arr[10]}, ${this.__arr[11]}\n` +
-               `${this.__arr[12]}, ${this.__arr[13]}, ${this.__arr[14]}, ${this.__arr[15]}`;
+    toString(digits = 2) {
+        return `${this.__arr[ 0].toFixed(digits)}, ${this.__arr[ 1].toFixed(digits)}, ${this.__arr[ 2].toFixed(digits)}, ${this.__arr[ 3].toFixed(digits)}\n` +
+               `${this.__arr[ 4].toFixed(digits)}, ${this.__arr[ 5].toFixed(digits)}, ${this.__arr[ 6].toFixed(digits)}, ${this.__arr[ 7].toFixed(digits)}\n` +
+               `${this.__arr[ 8].toFixed(digits)}, ${this.__arr[ 9].toFixed(digits)}, ${this.__arr[10].toFixed(digits)}, ${this.__arr[11].toFixed(digits)}\n` +
+               `${this.__arr[12].toFixed(digits)}, ${this.__arr[13].toFixed(digits)}, ${this.__arr[14].toFixed(digits)}, ${this.__arr[15].toFixed(digits)}`;
     }
     
     get x() {
@@ -536,10 +536,10 @@ class mat3 {
     determinant() { return _glMatrix._mat3.determinant(this.__arr); }
     frob() { return _glMatrix._mat3.frob(this.__arr); }
     
-    toString() {
-        return `${this.__arr[0]}, ${this.__arr[1]}, ${this.__arr[2]}\n` +
-               `${this.__arr[3]}, ${this.__arr[4]}, ${this.__arr[5]}\n` +
-               `${this.__arr[6]}, ${this.__arr[7]}, ${this.__arr[8]}`;
+    toString(digits = 2) {
+        return `${this.__arr[0].toFixed(digits)}, ${this.__arr[1].toFixed(digits)}, ${this.__arr[2].toFixed(digits)}\n` +
+               `${this.__arr[3].toFixed(digits)}, ${this.__arr[4].toFixed(digits)}, ${this.__arr[5].toFixed(digits)}\n` +
+               `${this.__arr[6].toFixed(digits)}, ${this.__arr[7].toFixed(digits)}, ${this.__arr[8].toFixed(digits)}`;
     }
     
     get x() {
@@ -607,8 +607,8 @@ class mat2 {
     determinant() { return _glMatrix._mat2.determinant(this.__arr); }
     frob() { return _glMatrix._mat2.frob(this.__arr); }
     
-    toString() {
-        return `${this.__arr[0]}, ${this.__arr[1]}\n${this.__arr[2]}, ${this.__arr[3]}`;
+    toString(digits = 2) {
+        return `${this.__arr[0].toFixed(digits)}, ${this.__arr[1].toFixed(digits)}\n${this.__arr[2].toFixed(digits)}, ${this.__arr[3].toFixed(digits)}`;
     }
     
     get x() {

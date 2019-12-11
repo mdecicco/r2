@@ -357,14 +357,16 @@ namespace r2 {
 			glCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_id));
 
 			if (ibo) {
-				glCall(glDrawElementsInstanced(GL_TRIANGLES, eseg.size(), index_component_types[ebo->type()], (void*)eseg.memBegin, iseg.size()));
+				size_t instance_count = node->instance_count(); //iseg.size()
+				glCall(glDrawElementsInstanced(GL_TRIANGLES, eseg.size(), index_component_types[ebo->type()], (void*)eseg.memBegin, instance_count));
 			} else {
 				glCall(glDrawElements(GL_TRIANGLES, eseg.size(), index_component_types[ebo->type()], (void*)eseg.memBegin));
 			}
 			glCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 		} else {
 			if (ibo) {
-				glCall(glDrawArraysInstanced(GL_TRIANGLES, vseg.begin, vseg.size(), iseg.size()));
+				size_t instance_count = node->instance_count(); //iseg.size()
+				glCall(glDrawArraysInstanced(GL_TRIANGLES, vseg.begin, vseg.size(), instance_count));
 			} else {
 				glCall(glDrawArrays(GL_TRIANGLES, vseg.begin, vseg.size()));
 			}

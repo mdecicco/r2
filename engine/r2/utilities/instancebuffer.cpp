@@ -122,4 +122,23 @@ namespace r2 {
 
         return seg;
     }
+	void instance_buffer::update(const ins_bo_segment& segment, const void* data) {
+		if (segment.buffer != this) {
+			r2Error("Segment for another instance buffer passed to instance_buffer::update");
+			return;
+		}
+
+		if (segment.memBegin > m_format->size() * m_instanceCount) {
+			r2Error("Out of range segment.memBegin (%llu) provided to instance_buffer::update", segment.memBegin);
+			return;
+		}
+
+		if (segment.memEnd > m_format->size() * m_instanceCount) {
+			r2Error("Out of range segment.memEnd (%llu) provided to instance_buffer::update", segment.memEnd);
+			return;
+		}
+
+		memcpy((u8*)m_data + segment.memBegin, data, m_format->size());
+		updated(segment.memBegin, segment.memEnd);
+	}
 }
