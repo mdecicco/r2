@@ -333,7 +333,7 @@ class vec2 {
 class quat {
     constructor() {
         this.__arr = new Float32Array(4);
-        if (arguments.keys().length > 0) __set_arr(this, arguments, 4, 'quat');
+        if (Object.keys(arguments).length > 0) __set_arr(this, arguments, 4, 'quat');
         else this.__arr[3] = 1.0;
     }
     
@@ -386,7 +386,7 @@ class quat {
     static slerp(a, b, factor) { const out = new quat(); _glMatrix._quat.slerp(out.__arr, a.__arr, b.__arr, factor); return out; }
     static sqlerp(a, b, c, d, factor) { const out = new quat(); _glMatrix._quat.slerp(out.__arr, a.__arr, b.__arr, c.__arr, d.__arr, factor); return out; }
     static rotationTo(a, b) { const out = new quat(); _glMatrix._quat.rotationTo(out.__arr, a.__arr, b.__arr); return out; }
-    static fromeuler(x, y, z) { const out = new quat(); _glMatrix._quat.fromEuler(out.__arr, x * DEG_TO_RAD, y * DEG_TO_RAD, z * DEG_TO_RAD); return out; }
+    static fromEuler(x, y, z) { const out = new quat(); _glMatrix._quat.fromEuler(out.__arr, x * DEG_TO_RAD, y * DEG_TO_RAD, z * DEG_TO_RAD); return out; }
     static fromMat3(mat) { const out = new quat(); _glMatrix._quat.fromMat3(out.__arr, mat.__arr); return out; }
     static fromAxisAngle(axis, angle) { const out = new quat(); _glMatrix._quat.setAxisAngle(out.__arr, axis.__arr, angle * DEG_TO_RAD); return out; }
     static angle(a, b) { return _glMatrix._quat.angle(a.__arr, b.__arr) * RAD_TO_DEG; }

@@ -162,6 +162,8 @@ namespace r2 {
 
 		activate_allocator();
 
+		r2engine::get()->destroy_all_entities();
+
 		if (!m_scriptState.IsEmpty()) {
 			if (!m_willBecomeActive.IsEmpty()) m_willBecomeActive.Reset();
 			if (!m_becameActive.IsEmpty()) m_becameActive.Reset();
@@ -175,8 +177,6 @@ namespace r2 {
 			r2engine::get()->scenes()->destroy(m_scene);
 			m_scene = nullptr;
 		}
-
-		r2engine::get()->destroy_all_entities();
 
 		if (m_engineData) {
 			for(auto data : *m_engineData) {

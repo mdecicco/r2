@@ -53,6 +53,9 @@ namespace r2 {
 			r2::window* window();
 			engine_state_data* get_engine_state_data(u16 factoryIdx);
 			scene* current_scene();
+			inline f32 fps() const { return m_fps; }
+
+			//
 			bool open_window(i32 w, i32 h, const mstring& title, bool can_resize = false, bool fullscreen = false);
 			virtual void handle(event* evt);
 			void log(const mstring& pre, mstring msg,...);
@@ -88,6 +91,7 @@ namespace r2 {
 			// stuff
 			r2::window m_window;
 			mvector<mstring> m_args;
+			f32 m_fps;
 
 			// v8 initialization
 			std::unique_ptr<v8::Platform> m_platform;

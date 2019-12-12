@@ -55,8 +55,11 @@ namespace r2 {
 	scene_entity::~scene_entity() {
 		if (!m_destroyed) destroy();
 		delete m_name;
+		m_name = nullptr;
 		delete m_scriptFuncs;
+		m_scriptFuncs = nullptr;
 		delete m_children;
+		m_children = nullptr;
 	}
 
 	void scene_entity::call(const mstring& function, u8 argc, LocalValueHandle* args) {

@@ -112,6 +112,8 @@ namespace r2 {
     r2engine::r2engine(int argc,char** argv) : m_platform(v8::platform::NewDefaultPlatform()) {
         for(int i = 0;i < argc;i++) m_args.push_back(mstring(argv[i]));
 
+		m_fps = 0.00001f;
+
 		mstring flags = "--expose_gc";
 		v8::V8::SetFlagsFromString(flags.c_str(), flags.length());
 		v8::V8::InitializeExternalStartupData(argv[0]);
@@ -254,7 +256,8 @@ namespace r2 {
 	
 	void r2engine::destroy_all_entities() {
 		m_entities.enable();
-		for (auto entity : *m_entities->entities) {
+		auto entities = *m_entities->entities;
+		for (auto entity : entities) {
 			entity->destroy();
 			delete entity;
 		}
@@ -266,7 +269,8 @@ namespace r2 {
 		m_entities.enable();
 		for(entity_system* sys : r2engine::systems) sys->initialize_entities();
 
-		for(scene_entity* entity : *m_entities->uninitializedEntities) {
+		auto entities = *m_entities->uninitializedEntities;
+		for(scene_entity* entity : entities) {
 			entity->bind("wasInitialized");
 			entity->bind("handleEvent");
 			entity->bind("update");
@@ -282,7 +286,8 @@ namespace r2 {
 
 	void r2engine::update_entities(f32 dt) {
 		m_entities.enable();
-		for(scene_entity* entity : *m_entities->entities) entity->update(dt);
+		auto entities = *m_entities->entities;
+		for(scene_entity* entity : entities) entity->update(dt);
 		m_entities.disable();
 	}
 
@@ -308,13 +313,18 @@ namespace r2 {
 			f32 time_now = frameTimer;
 			f32 dt = time_now - last_time;
 			last_time = time_now;
+			m_fps = 1.0f / dt;
 
 			state* currentState = m_stateMgr->current();
 			if (currentState) currentState->update(dt);
 
 			for(entity_system* sys : r2engine::systems) sys->tick(dt);
 
+			timer t;
+			t.start();
 			update_entities(dt);
+			f32 ut = t;
+			printf("update_entities took %f ms\n", ut * 1000.0f);
 
 			scene* currentScene = current_scene();
 			if (currentScene) currentScene->render();

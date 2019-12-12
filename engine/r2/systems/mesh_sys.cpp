@@ -287,22 +287,22 @@ namespace r2 {
 	}
 
 	void mesh_sys::bind_instance_data(mesh_component* component, scene_entity* entity) {
-		auto get = v8pp::wrap_function(r2engine::isolate(), nullptr, [component](v8Args args) {
-			component->get_instance_data(args);
+		auto get = v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+			entity->mesh->get_instance_data(args);
 		});
-		auto set = v8pp::wrap_function(r2engine::isolate(), nullptr, [component](v8Args args) {
-			component->set_instance_data(args);
+		auto set = v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+			entity->mesh->set_instance_data(args);
 		});
 		entity->bind(component, "instance", get, set);
 	}
 
 	void mesh_sys::bind_vertex_data(mesh_component* component, scene_entity* entity) {
-		entity->bind(component, "max_vertex_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [component](v8Args args) {
-			component->get_max_vertex_count(args);
+		entity->bind(component, "max_vertex_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+			entity->mesh->get_max_vertex_count(args);
 		}), Local<Function>(), PropertyAttribute::ReadOnly);
 
-		entity->bind(component, "vertex_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [component](v8Args args) {
-			component->get_vertex_count(args);
+		entity->bind(component, "vertex_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+			entity->mesh->get_vertex_count(args);
 		}), Local<Function>(), PropertyAttribute::ReadOnly);
 
 		entity->bind(this, "get_vertices", [](entity_system* sys, scene_entity* entity, v8Args args) {
@@ -315,12 +315,12 @@ namespace r2 {
 	}
 
 	void mesh_sys::bind_index_data(mesh_component* component, scene_entity* entity) {
-		entity->bind(component, "max_index_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [component](v8Args args) {
-			component->get_max_index_count(args);
+		entity->bind(component, "max_index_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+			entity->mesh->get_max_index_count(args);
 		}), Local<Function>(), PropertyAttribute::ReadOnly);
 
-		entity->bind(component, "index_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [component](v8Args args) {
-			component->get_index_count(args);
+		entity->bind(component, "index_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+			entity->mesh->get_index_count(args);
 		}), Local<Function>(), PropertyAttribute::ReadOnly);
 
 		entity->bind(this, "get_indices", [](entity_system* sys, scene_entity* entity, v8Args args) {
@@ -333,8 +333,8 @@ namespace r2 {
 	}
 
 	void mesh_sys::bind_node(mesh_component* component, scene_entity* entity) {
-		auto get = v8pp::wrap_function(r2engine::isolate(), nullptr, [component](v8Args args) {
-			render_node* node = component->get_node();
+		auto get = v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+			render_node* node = entity->mesh->get_node();
 			if (!node) args.GetReturnValue().Set(v8::Null(args.GetIsolate()));
 			else {
 				try {
@@ -344,10 +344,10 @@ namespace r2 {
 				}
 			}
 		});
-		auto set = v8pp::wrap_function(r2engine::isolate(), nullptr, [component](v8Args args) {
+		auto set = v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
 			try {
 				render_node& node = v8pp::convert<render_node>::from_v8(args.GetIsolate(), args[0]);
-				component->set_node(&node);
+				entity->mesh->set_node(&node);
 			} catch (std::exception e) {
 				r2Error("Attempted to pass invalid value to render component's node");
 			}

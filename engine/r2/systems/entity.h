@@ -34,6 +34,10 @@ namespace r2 {
 				return (component_ptr_type)__get_component(sys, id);
 			}
 
+			component_ptr_type get() {
+				return (component_ptr_type)__get_component(sys, id);
+			}
+
 			void clear() {
 				id = 0;
 				sys = nullptr;

@@ -14,7 +14,7 @@ function format_size(sz) {
 
 class MeshTestState extends engine.State {
 	constructor () {
-		super("MeshTestState", Memory.Megabytes(16));
+		super("MeshTestState", Memory.Megabytes(24));
 	}
 	willBecomeActive = () => { }
 	becameActive = () => {
@@ -26,7 +26,7 @@ class MeshTestState extends engine.State {
 		
 		// load mesh and make renderable
 		
-		const o = new ObjFile("teapot.obj");
+		const o = new ObjFile("cube.obj");
 		// o.print();
 		
 		const vfmt = new gfx.VertexFormat();
@@ -39,7 +39,12 @@ class MeshTestState extends engine.State {
 		
 		const transform = Transform3D.scale(new vec3f(1.25, 1.25, 1.25));
 		
-		const info = o.makeNode(vfmt, ifmt, [{ transform }, { transform }]);
+		const entity_count = 80;
+		
+		const transforms = [];
+		for(var i = 0;i < entity_count;i++) transforms.push({ transform });
+		
+		const info = o.makeNode(vfmt, ifmt, transforms);
 		
 		const material = new gfx.Material("u_material", mfmt);
 		material.shader = gfx.load_shader("test", "./resource/mesh_component_test/shader.glsl");
@@ -47,18 +52,18 @@ class MeshTestState extends engine.State {
 		info.node.material_instance = material.instantiate();
 		info.node.material_instance.uniforms.vec3f("color", new vec3f(0.75, 0.1, 0.2));
 		
-		this.mesh = new Mesh(info.node, o.center);
-		this.mesh1 = new Mesh(info.node, o.center);
+		this.meshes = [];
+		for(var i = 0;i < entity_count;i++) {
+			this.meshes.push(new Mesh(info.node));
+		}
 		this.camera = new Camera();
 	}
 	render = () => {
 		ImGui.Text(`Memory: ${format_size(this.used_memory)} / ${format_size(this.max_memory)}`);
+		ImGui.Text(`FPS: ${engine.frame_rate().toFixed(2)}`);
 		if (ImGui.Button('Reset State', { w: 190, h: 20 })) {
 			engine.activate_state("MeshTestState");
 		}
-	}
-	update = () => {
-		this.camera.target = this.mesh.center;
 	}
 	willBecomeInactive = () => { }
 	becameInactive = () => { }
