@@ -39,27 +39,27 @@ namespace r2 {
 				vertex_attribute_type t = attributeTypes[i];
 				switch(t) {
 					attrCase(vat_int, i32)
-						attrCase(vat_float, f32)
-						attrCase(vat_uint, u32)
-						attrCase(vat_vec2i, vec2i)
-						attrCase(vat_vec2f, vec2f)
-						attrCase(vat_vec2ui, vec2ui)
-						attrCase(vat_vec3i, vec3i)
-						attrCase(vat_vec3f, vec3f)
-						attrCase(vat_vec3ui, vec3ui)
-						attrCase(vat_vec4i, vec4i)
-						attrCase(vat_vec4f, vec4f)
-						attrCase(vat_vec4ui, vec4ui)
-						attrCase(vat_mat2i, mat2i)
-						attrCase(vat_mat2f, mat2f)
-						attrCase(vat_mat2ui, mat2ui)
-						attrCase(vat_mat3i, mat3i)
-						attrCase(vat_mat3f, mat3f)
-						attrCase(vat_mat3ui, mat3ui)
-						attrCase(vat_mat4i, mat4i)
-						attrCase(vat_mat4f, mat4f)
-						attrCase(vat_mat4ui, mat4ui)
-				default: {
+					attrCase(vat_float, f32)
+					attrCase(vat_uint, u32)
+					attrCase(vat_vec2i, vec2i)
+					attrCase(vat_vec2f, vec2f)
+					attrCase(vat_vec2ui, vec2ui)
+					attrCase(vat_vec3i, vec3i)
+					attrCase(vat_vec3f, vec3f)
+					attrCase(vat_vec3ui, vec3ui)
+					attrCase(vat_vec4i, vec4i)
+					attrCase(vat_vec4f, vec4f)
+					attrCase(vat_vec4ui, vec4ui)
+					attrCase(vat_mat2i, mat2i)
+					attrCase(vat_mat2f, mat2f)
+					attrCase(vat_mat2ui, mat2ui)
+					attrCase(vat_mat3i, mat3i)
+					attrCase(vat_mat3f, mat3f)
+					attrCase(vat_mat3ui, mat3ui)
+					attrCase(vat_mat4i, mat4i)
+					attrCase(vat_mat4f, mat4f)
+					attrCase(vat_mat4ui, mat4ui)
+					default: {
 						r2Warn("Invalid vertex attribute type specified to vertex format.");
 						return false;
 					}
@@ -118,27 +118,27 @@ namespace r2 {
 				instance_attribute_type t = attributeTypes[i];
 				switch(t) {
 					attrCase(iat_int, i32)
-						attrCase(iat_float, f32)
-						attrCase(iat_uint, u32)
-						attrCase(iat_vec2i, vec2i)
-						attrCase(iat_vec2f, vec2f)
-						attrCase(iat_vec2ui, vec2ui)
-						attrCase(iat_vec3i, vec3i)
-						attrCase(iat_vec3f, vec3f)
-						attrCase(iat_vec3ui, vec3ui)
-						attrCase(iat_vec4i, vec4i)
-						attrCase(iat_vec4f, vec4f)
-						attrCase(iat_vec4ui, vec4ui)
-						attrCase(iat_mat2i, mat2i)
-						attrCase(iat_mat2f, mat2f)
-						attrCase(iat_mat2ui, mat2ui)
-						attrCase(iat_mat3i, mat3i)
-						attrCase(iat_mat3f, mat3f)
-						attrCase(iat_mat3ui, mat3ui)
-						attrCase(iat_mat4i, mat4i)
-						attrCase(iat_mat4f, mat4f)
-						attrCase(iat_mat4ui, mat4ui)
-				default: {
+					attrCase(iat_float, f32)
+					attrCase(iat_uint, u32)
+					attrCase(iat_vec2i, vec2i)
+					attrCase(iat_vec2f, vec2f)
+					attrCase(iat_vec2ui, vec2ui)
+					attrCase(iat_vec3i, vec3i)
+					attrCase(iat_vec3f, vec3f)
+					attrCase(iat_vec3ui, vec3ui)
+					attrCase(iat_vec4i, vec4i)
+					attrCase(iat_vec4f, vec4f)
+					attrCase(iat_vec4ui, vec4ui)
+					attrCase(iat_mat2i, mat2i)
+					attrCase(iat_mat2f, mat2f)
+					attrCase(iat_mat2ui, mat2ui)
+					attrCase(iat_mat3i, mat3i)
+					attrCase(iat_mat3f, mat3f)
+					attrCase(iat_mat3ui, mat3ui)
+					attrCase(iat_mat4i, mat4i)
+					attrCase(iat_mat4f, mat4f)
+					attrCase(iat_mat4ui, mat4ui)
+					default: {
 						r2Warn("Invalid instance attribute type specified to instance format.");
 						return false;
 					}
@@ -148,6 +148,95 @@ namespace r2 {
 			return false;
 		}
 		#undef attrCase
+
+		return true;
+	}
+
+	bool parse_vertices(v8Args args, vertex_format* fmt, u8** dest, size_t* count) {
+		*dest = nullptr;
+		*count = 0;
+
+		mvector<Local<Object>> maybeVertices;
+		for(u8 a = 0;a < args.Length();a++) {
+			Local<Value> arg = args[a];
+			if (arg->IsArray()) {
+				Local<Array> arr = Local<Array>::Cast(arg);
+				for(u32 v = 0;v < arr->Length();v++) {
+					Local<Value> maybeVertex = arr->Get(v);
+					if (maybeVertex->IsObject()) {
+						maybeVertices.push_back(Local<Object>::Cast(maybeVertex));
+					} else {
+						r2Error("Invalid parameter: Expected a variable number of arguments, that can either be arrays of vertex objects, or vertex objects.");
+						return false;
+					}
+				}
+			} else if (arg->IsObject()) maybeVertices.push_back(Local<Object>::Cast(arg));
+			else {
+				r2Error("Invalid parameter: Expected a variable number of arguments, that can either be arrays of vertex objects, or vertex objects.");
+				return false;
+			}
+		}
+
+		*dest = new u8[maybeVertices.size() * fmt->size()];
+		*count = maybeVertices.size();
+		::memset(*dest, 0, maybeVertices.size() * fmt->size());
+
+		u32 idx = 0;
+		for (auto maybeVertex : maybeVertices) {
+			if (!parse_vertex(maybeVertex, fmt, (*dest) + (idx * fmt->size()))) {
+				r2Error("Invalid Parameter: A vertex object was encountered that does not adhere to the specified vertex format:");
+				r2Warn("{%s}", fmt->to_string().c_str());
+				delete[] (*dest);
+				*dest = nullptr;
+				*count = 0;
+				return false;
+			}
+			idx++;
+		}
+
+		return true;
+	}
+
+	bool parse_indices(v8Args args, index_type type, u8** dest, size_t* count) {
+		*dest = nullptr;
+		*count = 0;
+
+		mvector<Local<Value>> maybeIndices;
+		for(u8 a = 0;a < args.Length();a++) {
+			Local<Value> arg = args[a];
+			if (arg->IsArray()) {
+				Local<Array> arr = Local<Array>::Cast(arg);
+				for(u32 v = 0;v < arr->Length();v++) {
+					Local<Value> maybeIndex = arr->Get(v);
+					if (maybeIndex->IsNumber()) {
+						maybeIndices.push_back(maybeIndex);
+					} else {
+						r2Error("Invalid parameter: MeshInfo.appendIndices accepts a variable number of arguments, that can either be arrays of index values, or index values.");
+						return false;
+					}
+				}
+			} else if (arg->IsObject()) maybeIndices.push_back(arg);
+			else {
+				r2Error("Invalid parameter: MeshInfo.appendIndices accepts a variable number of arguments, that can either be arrays of index values, or index values.");
+				return false;
+			}
+		}
+
+		*dest = new u8[maybeIndices.size() * type];
+		*count = maybeIndices.size();
+		::memset(*dest, 0, maybeIndices.size() * type);
+
+		u32 idx = 0;
+		for (auto maybeIndex : maybeIndices) {
+			if (!parse_index(maybeIndex, type, (*dest) + (idx * (size_t)type))) {
+				r2Error("An instance object was passed to MeshInfo.appendIndices that does not adhere to the index type.");
+				delete[] (*dest);
+				*dest = nullptr;
+				*count = 0;
+				return false;
+			}
+			idx++;
+		}
 
 		return true;
 	}
@@ -163,53 +252,22 @@ namespace r2 {
 			return;
 		}
 
-		mvector<Local<Object>> maybeVertices;
-		for(u8 a = 0;a < args.Length();a++) {
-			Local<Value> arg = args[a];
-			if (arg->IsArray()) {
-				Local<Array> arr = Local<Array>::Cast(arg);
-				for(u32 v = 0;v < arr->Length();v++) {
-					Local<Value> maybeVertex = arr->Get(v);
-					if (maybeVertex->IsObject()) {
-						maybeVertices.push_back(Local<Object>::Cast(maybeVertex));
-					} else {
-						r2Error("Invalid parameter: MeshInfo.appendVertices accepts a variable number of arguments, that can either be arrays of vertex objects, or vertex objects.");
-						return;
-					}
-				}
-			} else if (arg->IsObject()) maybeVertices.push_back(Local<Object>::Cast(arg));
-			else {
-				r2Error("Invalid parameter: MeshInfo.appendVertices accepts a variable number of arguments, that can either be arrays of vertex objects, or vertex objects.");
-				return;
-			}
-		}
-
-		u8* vdata = new u8[maybeVertices.size() * m_vertexFormat->size()];
-		memset(vdata, 0, maybeVertices.size() * m_vertexFormat->size());
-
-		u32 idx = 0;
-		for (auto maybeVertex : maybeVertices) {
-			if (!parse_vertex(maybeVertex, m_vertexFormat, vdata + (idx * m_vertexFormat->size()))) {
-				r2Error("A vertex object was passed to MeshInfo.appendVertices that does not adhere to the specified vertex format:");
-				r2Warn("{%s}", m_vertexFormat->to_string().c_str());
+		u8* vdata = nullptr;
+		size_t count = 0;
+		if (parse_vertices(args, m_vertexFormat, &vdata, &count)) {
+			if (count + m_last_vertex_idx > m_vertex_count) {
+				r2Error("Cannot append %d vertices to MeshInfo, max vertex count needs to be increased.", count);
 				delete[] vdata;
 				return;
 			}
-			idx++;
-		}
 
-		if (idx + m_last_vertex_idx > m_vertex_count) {
-			r2Error("Cannot append %d vertices to MeshInfo, max vertex count needs to be increased.", idx);
+			size_t vsize = m_vertexFormat->size();
+			for(size_t i = 0;i < count;i++) {
+				append_vertex_data(vdata + (i * vsize));
+			}
+
 			delete[] vdata;
-			return;
 		}
-
-		size_t vsize = m_vertexFormat->size();
-		for(idx = 0;idx < maybeVertices.size();idx++) {
-			append_vertex_data(vdata + (idx * vsize));
-		}
-
-		delete[] vdata;
 	}
 
 	void mesh_construction_data::append_indices_v8(v8Args args) {
@@ -218,51 +276,21 @@ namespace r2 {
 			return;
 		}
 
-		mvector<Local<Value>> maybeIndices;
-		for(u8 a = 0;a < args.Length();a++) {
-			Local<Value> arg = args[a];
-			if (arg->IsArray()) {
-				Local<Array> arr = Local<Array>::Cast(arg);
-				for(u32 v = 0;v < arr->Length();v++) {
-					Local<Value> maybeIndex = arr->Get(v);
-					if (maybeIndex->IsNumber()) {
-						maybeIndices.push_back(maybeIndex);
-					} else {
-						r2Error("Invalid parameter: MeshInfo.appendIndices accepts a variable number of arguments, that can either be arrays of index values, or index values.");
-						return;
-					}
-				}
-			} else if (arg->IsObject()) maybeIndices.push_back(arg);
-			else {
-				r2Error("Invalid parameter: MeshInfo.appendIndices accepts a variable number of arguments, that can either be arrays of index values, or index values.");
-				return;
-			}
-		}
-
-		u8* idata = new u8[maybeIndices.size() * m_indexType];
-		memset(idata, 0, maybeIndices.size() * m_indexType);
-
-		u32 idx = 0;
-		for (auto maybeIndex : maybeIndices) {
-			if (!parse_index(maybeIndex, m_indexType, idata + (idx * m_indexType))) {
-				r2Error("An instance object was passed to MeshInfo.appendIndices that does not adhere to the index type.");
+		u8* idata = nullptr;
+		size_t count = 0;
+		if (parse_indices(args, m_indexType, &idata, &count)) {
+			if (count + m_last_index_idx > m_index_count) {
+				r2Error("Cannot append %d indices to MeshInfo, max index count needs to be increased.", count);
 				delete[] idata;
 				return;
 			}
-			idx++;
-		}
 
-		if (idx + m_last_index_idx > m_index_count) {
-			r2Error("Cannot append %d indices to MeshInfo, max index count needs to be increased.", idx);
+			for(size_t i = 0;i < count;i++) {
+				append_index_data(idata + (i * (size_t)m_indexType));
+			}
+
 			delete[] idata;
-			return;
 		}
-
-		for(idx = 0;idx < maybeIndices.size();idx++) {
-			append_index_data(idata + (idx * (u32)m_indexType));
-		}
-
-		delete[] idata;
 	}
 
 	void mesh_construction_data::append_instances_v8(v8Args args) {

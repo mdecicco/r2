@@ -22,13 +22,31 @@ namespace r2 {
 		return m_node && m_node->instance_valid(m_id);
 	}
 
-	void render_node_instance::update_raw(const void* data) {
+	void render_node_instance::update_instance_raw(const void* data) {
 		if (!m_node) {
 			r2Error("Invalid render_node_instance cannot be updated");
 			return;
 		}
 
 		m_node->update_instance_raw(m_id, data);
+	}
+
+	void render_node_instance::update_vertices_raw(const void* data, size_t count) {
+		if (!m_node) {
+			r2Error("Invalid render_node_instance cannot be updated");
+			return;
+		}
+
+		m_node->update_vertices_raw(m_id, data, count);
+	}
+
+	void render_node_instance::update_indices_raw(const void* data, size_t count) {
+		if (!m_node) {
+			r2Error("Invalid render_node_instance cannot be updated");
+			return;
+		}
+
+		m_node->update_indices_raw(m_id, data, count);
 	}
 
 
@@ -39,6 +57,10 @@ namespace r2 {
 		m_constructionData = cdata;
 		m_material = nullptr;
 		m_nextInstanceIdx = 0;
+		m_uniforms = nullptr;
+
+		m_vertexCount = cdata->vertex_count();
+		m_indexCount = cdata->index_count();
 
         if(indexData) m_indexData = idx_bo_segment(*indexData);
         if(instanceData) m_instanceData = ins_bo_segment(*instanceData);
@@ -112,6 +134,40 @@ namespace r2 {
 		size_t memEnd = memBegin + instanceSize;
 		ins_bo_segment seg = m_instanceData.sub(idx, idx + 1, memBegin, memEnd);
 		m_instanceData.buffer->update(seg, data);
+	}
+	
+	void render_node::update_vertices_raw(instanceId id, const void* data, size_t count) {
+		auto i = m_instanceIndices.find(id);
+		if (i == m_instanceIndices.end()) {
+			r2Error("render_node_instance %llu is invalid and cannot be updated", id);
+			return;
+		}
+
+		if (count > m_vertexData.size()) {
+			r2Error("More vertices (%llu) supplied to render_node_instance than its node can contain. Increase the max vertex count when creating the mesh", count);
+			return;
+		}
+
+		size_t size = m_vertexData.buffer->format()->size();
+		m_vertexData.buffer->update(m_vertexData.sub(0, count, 0, count * size), data);
+		m_vertexCount = count;
+	}
+
+	void render_node::update_indices_raw(instanceId id, const void* data, size_t count) {
+		auto i = m_instanceIndices.find(id);
+		if (i == m_instanceIndices.end()) {
+			r2Error("render_node_instance %llu is invalid and cannot be updated", id);
+			return;
+		}
+
+		if (count > m_indexData.size()) {
+			r2Error("More indices (%llu) supplied to render_node_instance than its node can contain. Increase the max index count when creating the mesh", count);
+			return;
+		}
+
+		size_t size = m_indexData.buffer->type();
+		m_indexData.buffer->update(m_indexData.sub(0, count, 0, count * size), data);
+		m_indexCount = count;
 	}
 	
 	bool render_node::instance_valid(instanceId id) const {

@@ -45,6 +45,7 @@ SOURCE_GROUP_BY_FOLDER(r2)
 
 target_include_directories(r2 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}\\include")
 target_link_directories(r2 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/lib)
-target_link_libraries(r2 v8pp v8 v8_libbase v8_libplatform glfw3 opengl32)
+target_link_libraries(r2 debug debug/v8pp debug/v8 debug/v8_libbase debug/v8_libplatform debug/glfw3 opengl32)
+target_link_libraries(r2 optimized release/v8pp release/v8 release/v8_libbase release/v8_libplatform release/glfw3 opengl32)
 
 add_definitions(-D_CRT_NO_VA_START_VALIDATION)

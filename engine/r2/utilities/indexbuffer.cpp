@@ -49,4 +49,28 @@ namespace r2 {
 
         return seg;
     }
+
+	void index_buffer::update(const idx_bo_segment& seg, const void* data) {
+		if (!seg.is_valid()) {
+			r2Error("Attempted to update invalid segment of index buffer. Ignoring");
+			return;
+		}
+		if (seg.buffer != this) {
+			r2Error("Segment for another uniform buffer passed to index_buffer::update");
+			return;
+		}
+
+		if (seg.memBegin > m_type * m_indexCount) {
+			r2Error("Out of range segment.memBegin (%llu) provided to index_buffer::update", seg.memBegin);
+			return;
+		}
+
+		if (seg.memEnd > m_type * m_indexCount) {
+			r2Error("Out of range segment.memEnd (%llu) provided to index_buffer::update", seg.memEnd);
+			return;
+		}
+
+		memcpy((u8*)m_data + seg.memBegin, data, seg.memsize());
+		updated(seg.memBegin, seg.memEnd);
+	}
 }

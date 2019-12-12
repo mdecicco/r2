@@ -55,6 +55,17 @@ namespace r2 {
     class vertex_buffer;
     struct vtx_bo_segment : public gpu_buffer_segment {
 		vtx_bo_segment() : gpu_buffer_segment(), buffer(nullptr) { }
+
+		vtx_bo_segment sub(size_t _begin, size_t _end, size_t _memBegin, size_t _memEnd) {
+			vtx_bo_segment seg;
+			seg.begin = begin + _begin;
+			seg.end = begin + _end;
+			seg.memBegin = memBegin + _memBegin;
+			seg.memEnd = memBegin + _memEnd;
+			seg.buffer = buffer;
+			return seg;
+		}
+
         vertex_buffer* buffer;
     };
 
@@ -67,6 +78,7 @@ namespace r2 {
 			virtual void* data() const;
 
             vtx_bo_segment append(const void* data, size_t count);
+			void update(const vtx_bo_segment& segment, const void* data);
 
         protected:
             vertex_format* m_format;

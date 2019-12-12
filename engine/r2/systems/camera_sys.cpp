@@ -49,13 +49,10 @@ namespace r2 {
 
 			auto state = sys->state();
 			state.enable();
-			camera_component* cam = (camera_component*)state->entity(entity->id());
+			camera_component* cam = entity->camera.get();
 
 			// do nothing if the camera is already active
-			if (cam->active) {
-				state.disable();
-				return;
-			}
+			if (cam->active) return;
 
 			// set the active camera to inactive, if there is one
 			state->for_each<camera_component>([](camera_component* c, size_t idx, bool& should_break) {
@@ -69,9 +66,6 @@ namespace r2 {
 			// activate this one
 			cam->active = true;
 			curScene->camera = entity;
-
-			
-			state.disable();
 		});
 		entity->bind(this, "remove_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->removeComponentFrom(entity);

@@ -18,9 +18,9 @@ class Camera extends engine.Entity {
 	
 	update = (frameDt, updateDt) => {
 		this.time += updateDt;
-		this.position = vec3.rotateY(new vec3f(0, 4, -14), this.target, this.time * 30.0);
+		this.position = vec3.rotateY(new vec3f(0, 20, -20), this.target, this.time * 30.0);
 		var windowSize = engine.window_size();
-		this.projection = Projection.perspective(60.0, windowSize.x / windowSize.y, 0.001, 100.0);
+		this.projection = Projection.perspective(60.0, 1, 0.001, 100.0);
 		this.transform = View.lookAt(this.position, this.target, this.up);
 	}
 };

@@ -181,6 +181,10 @@ namespace r2 {
 		r2engine::get()->dispatchAtFrameStart(&e);
 	}
 
+	f32 fps() {
+		return r2engine::get()->fps();
+	}
+
 	size_t kb2b(size_t kb) { return KBtoB(kb); }
 	size_t mb2b(size_t mb) { return MBtoB(mb); }
 	size_t gb2b(size_t gb) { return GBtoB(gb); }
@@ -233,6 +237,7 @@ namespace r2 {
 		m.set("window_size", &window_size);
 		m.set("register_state", &register_state);
 		m.set("activate_state", &activate_state);
+		m.set("frame_rate", &fps);
 
 		module mem(isolate);
 		mem.set("Kilobytes", kb2b);

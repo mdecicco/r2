@@ -30,8 +30,76 @@ namespace v8pp {
 
 		auto arr = obj->Get(v8str("__arr"));
 		if(!arr->IsUndefined()) {
-			// read values from that instead, this is a js vector class
-			obj = lo::Cast(arr);
+			// read values from that instead, this is a js vector or matrix class
+			if (arr->IsFloat32Array()) {
+				Local<Float32Array> values = Local<Float32Array>::Cast(arr);
+				if (values->Length() != count) {
+					r2Error("Expected object or array with exactly %d properties or elements", count);
+					for(u32 i = 0;i < values->Length();i++){
+						auto propName = values->Get(i);
+						mstring s = convert<mstring>::from_v8(isolate, propName);
+						r2Log("%d: %s", i, s.c_str());
+					}
+					return false;
+				}
+
+				auto buffer = values->Buffer();
+				if (!buffer.IsEmpty()) {
+					size_t offset = values->ByteOffset();
+					void* data = values->Buffer()->GetContents().Data();
+					memcpy(out, ((u8*)data) + offset, sizeof(T) * count);
+					return true;
+				}
+
+				for(u8 i = 0;i < count;i++) out[i] = values->Get(i)->ToNumber(isolate)->NumberValue(ctx).FromMaybe(T(0));
+				return true;
+			}
+			if (arr->IsInt32Array()) {
+				Local<Int32Array> values = Local<Int32Array>::Cast(arr);
+				if (values->Length() != count) {
+					r2Error("Expected object or array with exactly %d properties or elements", count);
+					for(u32 i = 0;i < values->Length();i++){
+						auto propName = values->Get(i);
+						mstring s = convert<mstring>::from_v8(isolate, propName);
+						r2Log("%d: %s", i, s.c_str());
+					}
+					return false;
+				}
+
+				auto buffer = values->Buffer();
+				if (!buffer.IsEmpty()) {
+					size_t offset = values->ByteOffset();
+					void* data = values->Buffer()->GetContents().Data();
+					memcpy(out, ((u8*)data) + offset, sizeof(T) * count);
+					return true;
+				}
+
+				for(u8 i = 0;i < count;i++) out[i] = values->Get(i)->ToInteger(isolate)->Int32Value(ctx).FromMaybe(T(0));
+				return true;
+			}
+			if (arr->IsUint32Array()) {
+				Local<Uint32Array> values = Local<Uint32Array>::Cast(arr);
+				if (values->Length() != count) {
+					r2Error("Expected object or array with exactly %d properties or elements", count);
+					for(u32 i = 0;i < values->Length();i++){
+						auto propName = values->Get(i);
+						mstring s = convert<mstring>::from_v8(isolate, propName);
+						r2Log("%d: %s", i, s.c_str());
+					}
+					return false;
+				}
+
+				auto buffer = values->Buffer();
+				if (!buffer.IsEmpty()) {
+					size_t offset = values->ByteOffset();
+					void* data = values->Buffer()->GetContents().Data();
+					memcpy(out, ((u8*)data) + offset, sizeof(T) * count);
+					return true;
+				}
+
+				for(u8 i = 0;i < count;i++) out[i] = values->Get(i)->ToInteger(isolate)->Uint32Value(ctx).FromMaybe(T(0));
+				return true;
+			}
 		}
 
 		auto properties = obj->GetPropertyNames(ctx);
@@ -57,7 +125,7 @@ namespace v8pp {
 				r2Error("Expected element or property at index %d to be a number", i);
 				return false;
 			}
-			out[i] = convert<T>::from_v8(isolate, v);
+			out[i] = out[i] = v->ToNumber(isolate)->NumberValue(ctx).FromMaybe(T(0));
 		}
 
 		return true;
