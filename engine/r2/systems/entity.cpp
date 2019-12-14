@@ -50,19 +50,36 @@ namespace r2 {
 		initialize_periodic_update();
 		initialize_event_receiver();
 		r2engine::entity_created(this);
+
+		m_scripted = true;
+	}
+
+	scene_entity::scene_entity(const mstring& name)
+		: m_id(scene_entity::nextEntityId++), m_name(nullptr), m_scriptFuncs(nullptr), m_destroyed(false), m_parent(nullptr), m_children(nullptr), isolate(nullptr) {
+		m_name = new mstring(name);
+		m_children = new mlist<scene_entity*>();
+
+		initialize_periodic_update();
+		initialize_event_receiver();
+		r2engine::entity_created(this);
+		
+		m_scripted = false;
 	}
 
 	scene_entity::~scene_entity() {
-		if (!m_destroyed) destroy();
+		if (!m_destroyed) deferred_destroy();
 		delete m_name;
 		m_name = nullptr;
-		delete m_scriptFuncs;
-		m_scriptFuncs = nullptr;
+		if (m_scriptFuncs) {
+			delete m_scriptFuncs;
+			m_scriptFuncs = nullptr;
+		}
 		delete m_children;
 		m_children = nullptr;
 	}
 
 	void scene_entity::call(const mstring& function, u8 argc, LocalValueHandle* args) {
+		if (!m_scripted) return;
 		if (m_scriptObj.IsEmpty()) return;
 
 		auto funcIter = m_scriptFuncs->find(function);
@@ -80,6 +97,7 @@ namespace r2 {
 	}
 
 	bool scene_entity::bind(const mstring& function) {
+		if (!m_scripted) return false;
 		if (!ensure_object_handle()) return false;
 
 		LocalValueHandle maybeFunc = LocalObjectHandle::Cast(m_scriptObj.Get(isolate))->Get(v8str(function.c_str()));
@@ -90,6 +108,7 @@ namespace r2 {
 	}
 
 	bool scene_entity::bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args)) {
+		if (!m_scripted) return false;
 		if (!ensure_object_handle()) return false;
 
 		auto func = [system, this, callback](v8Args args) {
@@ -101,6 +120,7 @@ namespace r2 {
 	}
 
 	bool scene_entity::bind(scene_entity_component* component, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set, v8::PropertyAttribute attribute) {
+		if (!m_scripted) return false;
 		if (!ensure_object_handle()) return false;
 
 		v8::Isolate* isolate = r2engine::isolate();
@@ -112,6 +132,7 @@ namespace r2 {
 	}
 	
 	bool scene_entity::ensure_object_handle() {
+		if (!m_scripted) return false;
 		if (m_scriptObj.IsEmpty()) {
 			LocalValueHandle self = convert<scene_entity>::to_v8(isolate, *this);
 			if (self.IsEmpty() || self->IsNullOrUndefined()) return false;
@@ -121,6 +142,7 @@ namespace r2 {
 	}
 
 	void scene_entity::unbind(const mstring& functionOrProp) {
+		if (!m_scripted) return;
 		auto func = m_scriptFuncs->find(functionOrProp);
 		if (func != m_scriptFuncs->end()) {
 			func->second.Reset();
@@ -140,10 +162,12 @@ namespace r2 {
 		}
 	}
 
-	void scene_entity::destroy() {
+	void scene_entity::deferred_destroy() {
 		m_destroyed = true;
 
-		if (!m_scriptObj.IsEmpty()) {
+		willBeDestroyed();
+
+		if (m_scripted && !m_scriptObj.IsEmpty()) {
 			auto funcIter = m_scriptFuncs->find("willBeDestroyed");
 			if (funcIter != m_scriptFuncs->end()) {
 				PersistentFunctionHandle func = funcIter->second;
@@ -161,52 +185,75 @@ namespace r2 {
 		destroy_periodic_update();
 		destroy_event_receiver();
 
-		for(auto fpair : *m_scriptFuncs) {
-			fpair.second.Reset();
-		}
-		m_scriptFuncs->clear();
+		if (m_scripted) {
+			auto funcs = *m_scriptFuncs;
+			for(auto fpair : funcs) {
+				fpair.second.Reset();
 
-		if (!m_scriptObj.IsEmpty()) {
-			m_scriptObj.Reset();
-			class_<scene_entity, raw_ptr_traits>::destroy_object(isolate, this);
+				if (!m_scriptObj.IsEmpty()) {
+					// just in case the entity still exists in JS, unbind all C++ functions and component property accessors
+					LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+					auto ctx = isolate->GetCurrentContext();
+
+					auto key = v8str(fpair.first.c_str());
+
+					bool deleted = obj->Delete(ctx, key).FromJust();
+					if (!deleted) {
+						r2Error("Failed to delete property \"%s\" on entity \"%s\"", fpair.first.c_str(), m_name->c_str());
+					}
+				}
+			}
+			m_scriptFuncs->clear();
+
+			if (!m_scriptObj.IsEmpty()) {
+				m_scriptObj.Reset();
+				class_<scene_entity, raw_ptr_traits>::destroy_object(isolate, this);
+			}
 		}
 	}
 
-	void scene_entity::deferred_destroy() {
+	void scene_entity::destroy() {
 		if (m_destroyed) {
 			r2Error("Entity \"%s\" was already destroyed", m_name->c_str());
 		}
+
 
 		for(auto child : *m_children) child->deferred_destroy();
 
 		m_destroyed = true;
 
-		trace t(r2engine::isolate());
-		event e(t.file, t.line, EVT_NAME_DESTROY_ENTITY, true, false);
-		e.data()->write(this);
-
-		r2engine::get()->dispatchAtFrameStart(&e);
+		if (m_scripted) {
+			trace t(r2engine::isolate());
+			event e(t.file, t.line, EVT_NAME_DESTROY_ENTITY, true, false);
+			e.data()->write(this);
+			r2engine::get()->dispatchAtFrameStart(&e);
+		} else {
+			event e = evt(EVT_NAME_DESTROY_ENTITY, true, false);
+			e.data()->write(this);
+			r2engine::get()->dispatchAtFrameStart(&e);
+		}
 	}
 
 	void scene_entity::initialize() {
 		start_periodic_updates();
 
+		onInitialize();
+
+		if (!m_scripted) return;
 		if (m_scriptObj.IsEmpty()) return;
 
-		auto funcIter = m_scriptFuncs->find("wasInitialized");
-		if (funcIter == m_scriptFuncs->end()) return;
-
-		PersistentFunctionHandle func = funcIter->second;
-		if (func.IsEmpty()) return;
-
-		TryCatch tc(isolate);
-		func.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptObj.Get(isolate), 0, nullptr);
-		check_script_exception(isolate, tc);
+		bind("handleEvent");
+		bind("update");
+		bind("willBeDestroyed");
+		if(bind("wasInitialized")) call("wasInitialized");
 	}
 
 	void scene_entity::handle(event* evt) {
-		if (evt->is_internal_only() || m_scriptObj.IsEmpty()) return;
+		if (evt->is_internal_only()) return;
 
+		onEvent(evt);
+		
+		if(!m_scripted || m_scriptObj.IsEmpty()) return;
 
 		auto funcIter = m_scriptFuncs->find("handleEvent");
 		if (funcIter == m_scriptFuncs->end()) return;
@@ -221,7 +268,9 @@ namespace r2 {
 	}
 
 	void scene_entity::doUpdate(f32 frameDt, f32 updateDt) {
-		if (m_scriptObj.IsEmpty()) return;
+		onUpdate(frameDt, updateDt);
+
+		if (!m_scripted || m_scriptObj.IsEmpty()) return;
 		
 		auto funcIter = m_scriptFuncs->find("update");
 		if (funcIter == m_scriptFuncs->end()) return;

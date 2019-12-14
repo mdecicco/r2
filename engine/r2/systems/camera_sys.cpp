@@ -8,7 +8,11 @@ namespace r2 {
 	camera_component::~camera_component() {
 	}
 
+	void camera_component::activate() {
+		((camera_sys*)system())->activate_camera(entity());
+	}
 
+	camera_sys* camera_sys::instance = nullptr;
 	camera_sys::camera_sys() {
 	}
 
@@ -20,10 +24,13 @@ namespace r2 {
 			system->addComponentTo(entity);
 		});
 	}
+
 	void camera_sys::deinitialize_entity(scene_entity* entity) {
 		auto s = state();
 		s.enable();
-		if (!s->contains_entity(entity->id())) entity->unbind("add_camera_component");
+		if (!s->contains_entity(entity->id())) {
+			entity->unbind("add_camera_component");
+		}
 		s.disable();
 	}
 
@@ -38,40 +45,18 @@ namespace r2 {
 	void camera_sys::bind(scene_entity_component* component, scene_entity* entity) {
 		using c = camera_component;
 		entity->unbind("add_camera_component");
+
 		entity->bind(component, "projection", &c::projection);
 		entity->bind(component, "active", &c::active, true);
 		entity->bind(this, "activate", [](entity_system* sys, scene_entity* entity, v8Args args) {
-			scene* curScene = r2engine::get()->current_scene();
-			if (!curScene) {
-				r2Error("There is no active scene for which to set an active camera");
-				return;
-			}
-
-			auto state = sys->state();
-			state.enable();
-			camera_component* cam = entity->camera.get();
-
-			// do nothing if the camera is already active
-			if (cam->active) return;
-
-			// set the active camera to inactive, if there is one
-			state->for_each<camera_component>([](camera_component* c, size_t idx, bool& should_break) {
-				// break if the active camera is found
-				should_break = c->active;
-
-				// deactivate
-				c->active = false;
-			});
-
-			// activate this one
-			cam->active = true;
-			curScene->camera = entity;
+			((camera_sys*)sys)->activate_camera(entity);
 		});
 		entity->bind(this, "remove_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->removeComponentFrom(entity);
 		});
 		entity->camera = component_ref<camera_component*>(this, component->id());
 	}
+
 	void camera_sys::unbind(scene_entity* entity) {
 		entity->unbind("camera");
 		entity->bind(this, "add_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
@@ -94,5 +79,40 @@ namespace r2 {
 	}
 
 	void camera_sys::handle(event* evt) {
+	}
+
+	void camera_sys::activate_camera(scene_entity* entity) {
+		if (!entity->camera) {
+			r2Error("Entity \"%s\" has no camera component", entity->name().c_str());
+			return;
+		}
+
+		scene* curScene = r2engine::get()->current_scene();
+		if (!curScene) {
+			r2Error("There is no active scene for which to set an active camera");
+			return;
+		}
+
+		auto state = this->state();
+		state.enable();
+		camera_component* cam = entity->camera.get();
+
+		// do nothing if the camera is already active
+		if (cam->active) return;
+
+		// set the active camera to inactive, if there is one
+		state->for_each<camera_component>([](camera_component* c) {
+			bool should_break = c->active;
+
+			// deactivate
+			c->active = false;
+
+			// break if the active camera is found
+			return !should_break;
+		});
+
+		// activate this one
+		cam->active = true;
+		curScene->camera = entity;
 	}
 };

@@ -54,6 +54,12 @@ namespace r2 {
 				if (m_enabled == 0) __disable_state_mem();
 			}
 
+			T* get() const {
+				assert(m_valid);
+				assert(m_enabled > 0);
+				return (T*)__get_state_data(m_factoryIdx);
+			}
+
 			T* operator -> () const {
 				assert(m_valid);
 				assert(m_enabled > 0);

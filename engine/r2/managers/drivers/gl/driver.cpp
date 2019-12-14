@@ -75,8 +75,8 @@ namespace r2 {
 		assert(sizeof(mat3f) == sizeof(f32) * 9);
 		assert(sizeof(mat4f) == sizeof(f32) * 16);
 
-		glDepthFunc(GL_LESS);
 		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LESS); 
 	}
 	
 	gl_render_driver::~gl_render_driver() {

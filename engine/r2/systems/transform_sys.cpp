@@ -10,6 +10,7 @@ namespace r2 {
 	}
 
 
+	transform_sys* transform_sys::instance = nullptr;
 	transform_sys::transform_sys() {
 	}
 
@@ -24,7 +25,9 @@ namespace r2 {
 	void transform_sys::deinitialize_entity(scene_entity* entity) {
 		auto s = state();
 		s.enable();
-		if (!s->contains_entity(entity->id())) entity->unbind("add_transform_component");
+		if (!s->contains_entity(entity->id())) {
+			entity->unbind("add_transform_component");
+		}
 		s.disable();
 	}
 
@@ -40,10 +43,10 @@ namespace r2 {
 		using c = transform_component;
 		entity->unbind("add_transform_component");
 		entity->bind(component, "transform", &c::transform, false, true, &cascade_mat4f, "full_transform");
-		entity->transform = component_ref<transform_component*>(this, component->id());
 		entity->bind(this, "remove_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->removeComponentFrom(entity);
 		});
+		entity->transform = component_ref<transform_component*>(this, component->id());
 	}
 	void transform_sys::unbind(scene_entity* entity) {
 		entity->unbind("transform");

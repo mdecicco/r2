@@ -13,8 +13,8 @@ layout (std140) uniform u_model { mat4 transform; } model;
 
 void main() {
     gl_Position = scene.view_proj * transform * vec4(vpos, 1.0);
-    o_norm = vnorm;
-    o_color = material.color;
+    o_norm = (inverse(transpose(transform)) * vec4(vnorm, 1.0)).xyz;
+    o_color = normalize(vpos);
 };
 
 // fragment

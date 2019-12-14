@@ -219,7 +219,7 @@ namespace r2 {
 			s.ctor<v8Args>();
 			register_class_state(s);
 			s.set("id", property(&scene_entity::id));
-			s.set("destroy", &scene_entity::deferred_destroy);
+			s.set("destroy", &scene_entity::destroy);
 			s.set("set_update_frequency", &scene_entity::setUpdateFrequency);
 			s.set("add_child", &scene_entity::add_child_entity);
 			s.set("remove_child", &scene_entity::remove_child_entity);

@@ -83,8 +83,11 @@ namespace r2 {
 			render_node_instance instantiate();
 			void release(instanceId id);
 			void update_instance_raw(instanceId id, const void* data);
+			void* instance_data(instanceId id);
 			void update_vertices_raw(instanceId id, const void* data, size_t count);
+			void* vertex_data();
 			void update_indices_raw(instanceId id, const void* data, size_t count);
+			void* index_data();
 			bool instance_valid(instanceId id) const;
 			inline size_t instance_count() const { return m_nextInstanceIdx; }
 			inline size_t vertex_count() const { return m_vertexCount; }

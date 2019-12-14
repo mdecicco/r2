@@ -153,8 +153,11 @@ namespace r2 {
 	void event_receiver::frame_started() {
 		m_isAtFrameStart = true;
 		memory_man::push_current(memory_man::global());
-		for (auto child : *m_children) child->frame_started();
-		for (auto e : *m_frameStartEvents) {
+		auto children = *m_children;
+		for (auto child : children) child->frame_started();
+
+		auto events = *m_frameStartEvents;
+		for (auto e : events) {
 			dispatch(e);
 			delete e;
 		}
@@ -171,7 +174,8 @@ namespace r2 {
 		bool subscribesTo = true;
 		if (m_subscribesTo->size() > 0) {
 			subscribesTo = false;
-			for(auto ename : *m_subscribesTo) {
+			auto subscriptions = *m_subscribesTo;
+			for(auto ename : subscriptions) {
 				if (ename == e->name()) {
 					subscribesTo = true;
 					break;
