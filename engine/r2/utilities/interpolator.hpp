@@ -35,13 +35,18 @@ namespace r2 {
     };
     
     template <typename t>
-    class Interpolator {
+    class interpolator {
         public:
-            Interpolator (const t& initial, f32 duration, InterpolationFactorCallback method)
-			: m_initial(initial), m_final(initial), m_duration(duration), m_useFinishedCb(false), m_transitionMethod(method), m_isStopped(true) {
+			typedef t (*interpolation_function)(const t&, const t&, f32);
+
+            interpolator (const t& initial, f32 duration, InterpolationFactorCallback method)
+				: m_initial(initial), m_final(initial), m_duration(duration),
+				  m_useFinishedCb(false), m_transitionMethod(method), m_isStopped(true),
+				  interpolation_callback(nullptr)
+			{
             }
 
-            ~Interpolator () { }
+            ~interpolator () { }
             
             f32 duration () const { return m_duration; }
 
@@ -59,7 +64,7 @@ namespace r2 {
                 m_finished = cb;
             }
             
-            Interpolator& operator = (const t& value) {
+            interpolator& operator = (const t& value) {
                 if(!m_isStopped) m_initial = *this;
                 else m_useFinishedCb = false;
 				m_startTick = tmr::now();
@@ -81,9 +86,11 @@ namespace r2 {
                     return m_initial;
                 }
                 f32 factor = m_transitionMethod(elapsed / m_duration);
+				if (interpolation_callback) return interpolation_callback(m_initial, m_final, factor);
                 return m_initial + ((m_final - m_initial) * factor);
             }
         
+			interpolation_function interpolation_callback;
         protected:
             InterpolationFactorCallback m_transitionMethod;
             bool m_useFinishedCb;

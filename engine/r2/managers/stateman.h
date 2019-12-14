@@ -18,23 +18,45 @@ namespace r2 {
     class state : public event_receiver, public periodic_update {
         public:
             state(v8Args args);
+			state(const mstring& name, size_t max_memory);
             virtual ~state();
 			
-			void init();
-			void destroy();
+			/* Accessors */
+			inline scene* getScene() const { return m_scene; }
+            inline mstring name() const { return *m_name; }
+            inline bool operator==(const state& rhs) const { return m_name == rhs.m_name; }
+			inline size_t getMaxMemorySize() const { return m_memory->size(); }
+			inline size_t getUsedMemorySize() const { return m_memory->used(); }
+			inline bool is_scripted() const { return m_scripted; }
 
-            state_man* manager() const;
-			scene* getScene() const;
-            mstring name() const;
-            bool operator==(const state& rhs) const;
+			/* Functions for derived classes */
+			virtual void onInitialize() { }
+			virtual void willBecomeActive() { }
+			virtual void becameActive() { }
+			virtual void willBecomeInactive() { }
+			virtual void becameInactive() { }
+			virtual void willBeDestroyed() { }
+			virtual void onUpdate(f32 frameDt, f32 updateDt) { }
+			virtual void onRender() { }
+			virtual void onEvent(event* evt) { }
 
+			/* Used internally by engine_state_data_ref (via global functions, these can't be private) */
+			void activate_allocator();
+			void deactivate_allocator(bool unsetEngineStateRef = false);
 			engine_state_data* get_engine_state_data(u16 factoryIdx);
 
-			void willBecomeActive();
-			void becameActive();
-			void willBecomeInactive();
-			void becameInactive();
-			void willBeDestroyed();
+        private:
+            friend class state_man;
+			friend class r2engine;
+
+			void init();
+			void init_script_data();
+			void destroy();
+			void _willBecomeActive();
+			void _becameActive();
+			void _willBecomeInactive();
+			void _becameInactive();
+			void _willBeDestroyed();
 			virtual void doUpdate(f32 frameDt, f32 updateDt);
 			void render();
 			virtual void handle(event* evt);
@@ -42,17 +64,10 @@ namespace r2 {
 			virtual void belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired);
 
 			void releaseResources();
-			size_t getMaxMemorySize() const;
-			size_t getUsedMemorySize() const;
 
-			void activate_allocator();
-			void deactivate_allocator(bool unsetEngineStateRef = false);
 
-        protected:
-            friend class state_man;
 			mvector<engine_state_data*>* m_engineData;
 
-            state_man* m_mgr;
 			v8::Isolate* isolate;
 			PersistentValueHandle m_scriptState;
 			PersistentFunctionHandle m_willBecomeActive;
@@ -68,6 +83,7 @@ namespace r2 {
 			size_t m_desiredMemorySize;
 			scene* m_scene;
             mstring* m_name;
+			bool m_scripted;
     };
 
     class state_man {

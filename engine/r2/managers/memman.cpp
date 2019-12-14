@@ -58,6 +58,7 @@ namespace r2 {
 	}
 
 	void* memory_allocator::allocate(size_t size) {
+		return malloc(size);
 		if (size > m_size - m_used) {
 			if (m_id == 1) printf("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
 			else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
@@ -75,6 +76,7 @@ namespace r2 {
 	}
 
 	void* memory_allocator::reallocate(void* ptr, size_t size) {
+		return realloc(ptr, size);
 		memory_block* block = blockFromPtr(ptr);
 		if (block->size == size) return ptr;
 		if (block->used == m_id) {
@@ -107,6 +109,8 @@ namespace r2 {
 	}
 
 	bool memory_allocator::deallocate(void* ptr) {
+		free(ptr);
+		return true;
 		memory_block* block = blockFromPtr(ptr);
 		if (block->used == m_id) {
 			deallocate_from_self(ptr);
@@ -206,6 +210,8 @@ namespace r2 {
 	}
 
 	void memory_allocator::deallocate_from_self(void* ptr) {
+		free(ptr);
+		return;
 		memory_block* block = blockFromPtr(ptr);
 		assert(block->used == m_id);
 
@@ -248,6 +254,7 @@ namespace r2 {
 	}
 
 	void* memory_allocator::reallocate_from_self(void* ptr, size_t size) {
+		return realloc(ptr, size);
 		memory_block* block = blockFromPtr(ptr);
 		assert(block->used == m_id);
 

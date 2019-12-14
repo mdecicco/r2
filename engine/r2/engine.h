@@ -9,6 +9,9 @@
 #include <r2/managers/memman.h>
 
 #include <r2/systems/entity.h>
+#include <r2/systems/transform_sys.h>
+#include <r2/systems/camera_sys.h>
+#include <r2/systems/mesh_sys.h>
 
 #include <r2/utilities/event.h>
 #include <r2/utilities/window.h>
@@ -59,6 +62,7 @@ namespace r2 {
 			bool open_window(i32 w, i32 h, const mstring& title, bool can_resize = false, bool fullscreen = false);
 			virtual void handle(event* evt);
 			void log(const mstring& pre, mstring msg,...);
+			void activate_state(const mstring& name);
 			void destroy_all_entities();
 
 			// loop functions

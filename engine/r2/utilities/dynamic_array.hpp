@@ -59,19 +59,13 @@ namespace r2 {
 				}
 			}
 
-			template <typename T>
-			void for_each(void (*callback)(T*, size_t, bool&)) {
+			template <typename T, typename F>
+			void for_each(F&& callback) {
 				assert(sizeof(T) == m_elementSize);
 				if (m_count == 0) return;
-				bool brk = false;
-				for (size_t i = 0;i < m_count && !brk;i++) callback((T*)(m_data + (i * m_elementSize)), i, brk);
-			}
-
-			template <typename T>
-			void for_each(void (*callback)(T*)) {
-				assert(sizeof(T) == m_elementSize);
-				if (m_count == 0) return;
-				for (size_t i = 0;i < m_count;i++) callback(((T*)(m_data + (i * m_elementSize))));
+				for (size_t i = 0;i < m_count;i++) {
+					if(!callback(((T*)(m_data + (i * m_elementSize))))) return;
+				}
 			}
 
 			inline void* at(size_t index) {
@@ -99,6 +93,12 @@ namespace r2 {
 			}
 
 			inline size_t size() { return m_count; }
+
+			void clear() {
+				m_count = 0;
+				m_capacity = 16;
+				r2realloc(m_data, m_elementSize * 16);
+			}
 
 		protected:
 			u8* m_data;
@@ -149,11 +149,16 @@ namespace r2 {
 				}
 			}
 
-			template <typename T>
-			void for_each(void (*callback)(T*, size_t, bool&)) { m_values.for_each<T>(callback); }
+			template <typename T, typename F>
+			void for_each(F&& callback) {
+				using F_type = typename std::decay<F>::type;
+				m_values.for_each<T, F>(std::forward<F_type>(callback));
+			}
 
-			template <typename T>
-			void for_each(void (*callback)(T*)) { m_values.for_each<T>(callback); }
+			void clear() {
+				m_values.clear();
+				m_offsets.clear();
+			}
 
 		protected:
 			untyped_dynamic_pod_array m_values;
@@ -165,6 +170,7 @@ namespace r2 {
 		public:
 			dynamic_pod_array() : m_count(0), m_capacity(16), m_data(new T[16]) {
 			}
+
 			~dynamic_pod_array() {
 				delete [] m_data;
 				m_data = nullptr;
@@ -172,7 +178,7 @@ namespace r2 {
 
 			void push(const T& value) {
 				if (m_count == m_capacity) {
-					m_data = r2realloc(m_data, m_capacity * 2 * sizeof(T));
+					m_data = (T*)r2realloc(m_data, m_capacity * 2 * sizeof(T));
 					m_capacity *= 2;
 				}
 
@@ -183,7 +189,7 @@ namespace r2 {
 			template <typename ... construction_args>
 			void push(construction_args ... args) {
 				if (m_count == m_capacity) {
-					m_data = r2realloc(m_data, m_capacity * 2 * sizeof(T));
+					m_data = (T*)r2realloc(m_data, m_capacity * 2 * sizeof(T));
 					m_capacity *= 2;
 				}
 
@@ -195,7 +201,7 @@ namespace r2 {
 				m_count--;
 
 				if (m_count < m_capacity / 2) {
-					m_data = r2realloc(m_data, (m_capacity / 2) * sizeof(T));
+					m_data = (T*)r2realloc(m_data, (m_capacity / 2) * sizeof(T));
 					m_capacity /= 2;
 				}
 
@@ -204,20 +210,22 @@ namespace r2 {
 				memcpy(m_data + index, m_data + (index + 1), sizeof(T) * (m_count - (index + 1)));
 			}
 
-			void for_each(void (*callback)(T*, size_t, bool&)) {
+			template <typename F>
+			void for_each(F&& callback) {
 				if (m_count == 0) return;
-				bool brk = false;
-				for (size_t i = 0;i < m_count && !brk;i++) callback(&m_data[i], i, brk);
-			}
-
-			void for_each(void (*callback)(T*)) {
-				if (m_count == 0) return;
-				for (size_t i = 0;i < m_count;i++) callback(&m_data[i]);
+				for (size_t i = 0;i < m_count;i++) {
+					if (!callback(&m_data[i])) return;
+				}
 			}
 
 			inline T* at(size_t index) { return &m_data[index]; }
 			inline T* operator[](size_t index) { return &m_data[index]; }
 			
+			void clear() {
+				m_count = 0;
+				m_capacity = 16;
+				r2realloc(m_data, sizeof(T) * 16);
+			}
 
 		protected:
 			T* m_data;
@@ -262,8 +270,16 @@ namespace r2 {
 				}
 			}
 
-			void for_each(void (*callback)(T*, size_t, bool&)) { m_values.for_each(callback); }
-			void for_each(void (*callback)(T*)) { m_values.for_each(callback); }
+			template <typename T, typename F>
+			void for_each(F&& callback) {
+				using F_type = typename std::decay<F>::type;
+				m_values.for_each<T, F>(std::forward<F_type>(callback));
+			}
+
+			void clear() {
+				m_values.clear();
+				m_offsets.clear();
+			}
 
 		protected:
 			dynamic_pod_array<T> m_values;

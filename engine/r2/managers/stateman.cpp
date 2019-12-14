@@ -9,17 +9,16 @@ using namespace v8pp;
 
 namespace r2 {
     state::state(v8Args args) :
-		m_mgr(r2engine::get()->states()),
 		isolate(args.GetIsolate()),
 		m_name(nullptr),
 		m_engineData(nullptr),
 		m_memory(nullptr),
 		m_scene(nullptr),
-		m_desiredMemorySize(MBtoB(2))
+		m_desiredMemorySize(MBtoB(2)),
+		m_scripted(true)
 	{
 		if (!r2engine::get()->renderer()->driver()) {
 			r2Error("No states can be created until after a render driver has been specified");
-			destroy();
 			return;
 		}
 
@@ -27,43 +26,36 @@ namespace r2 {
 
 		if (args.Length() != 2) {
 			r2Error("No name or max memory size passed to state");
-			destroy();
 			return;
 		}
 
 		if (!args[0]->IsString()) {
 			r2Error("The first parameter of state constructor should be the name of the state");
-			destroy();
 			return;
 		}
 
 		mstring name = convert<mstring>::from_v8(isolate, args[0]);
 		if (name.length() == 0) {
 			r2Error("State names must not be empty.");
-			destroy();
 			return;
 		}
 
-		if (m_mgr->get_state(name)) {
+		if (r2engine::get()->states()->get_state(name)) {
 			r2Error("State \"%s\" has already been registered.", name.c_str());
-			destroy();
 			return;
 		}
 
 		if (!args[1]->IsNumber()) {
 			r2Error("The second parameter of state constructor should be the name of the state");
-			destroy();
 			return;
 		}
 		size_t maxMemSize = convert<size_t>::from_v8(isolate, args[1]);
 		if (maxMemSize == 0) {
 			r2Error("The maximum memory size of a state can not be zero bytes...");
-			destroy();
 			return;
 		}
 		if (maxMemSize > memory_man::global()->size() - memory_man::global()->used()) {
 			r2Error("The specified maximum memory size exceeds the amount of available memory that can be used by anything in the application...\nEither increase the application's memory size via mem.ini or decrease this state's maximum memory size");
-			destroy();
 			return;
 		}
 
@@ -73,6 +65,36 @@ namespace r2 {
 		deactivate_allocator(true);
     }
 
+	state::state(const mstring& name, size_t max_memory) :
+		isolate(nullptr),
+		m_name(nullptr),
+		m_engineData(nullptr),
+		m_memory(nullptr),
+		m_scene(nullptr),
+		m_desiredMemorySize(max_memory),
+		m_scripted(false)
+	{
+		if (name.length() == 0) {
+			r2Error("State names must not be empty.");
+			return;
+		}
+
+		if (max_memory == 0) {
+			r2Error("The maximum memory size of a state can not be zero bytes...");
+			return;
+		}
+
+		if (max_memory > memory_man::global()->size() - memory_man::global()->used()) {
+			r2Error("The specified maximum memory size exceeds the amount of available memory that can be used by anything in the application...\nEither increase the application's memory size via mem.ini or decrease this state's maximum memory size");
+			return;
+		}
+
+		m_memory = new memory_allocator(max_memory);
+		activate_allocator();
+		m_name = new mstring(name);
+		deactivate_allocator(true);
+	}
+
     state::~state() {
 		destroy();
 		delete m_memory;
@@ -80,12 +102,21 @@ namespace r2 {
 
 	void state::init() {
 		activate_allocator();
+
 		m_engineData = new mvector<engine_state_data*>();
-		m_mgr->initialize_state_engine_data(this);
+		r2engine::get()->states()->initialize_state_engine_data(this);
 
 		initialize_periodic_update();
 		initialize_event_receiver();
 		m_scene = r2engine::get()->scenes()->create((*m_name) + "_scene");
+
+		onInitialize();
+
+		deactivate_allocator(true);
+	}
+
+	void state::init_script_data() {
+		if (!m_scripted) return;
 
 		LocalObjectHandle self = convert<state*>::to_v8(isolate, this);
 
@@ -154,17 +185,16 @@ namespace r2 {
 		} else if (!value->IsUndefined()) m_handleEvent.Reset(isolate, LocalFunctionHandle::Cast(value));
 
 		m_scriptState.Reset(isolate, LocalValueHandle::Cast(self));
-		deactivate_allocator(true);
 	}
 
 	void state::destroy() {
-		willBeDestroyed();
+		_willBeDestroyed();
 
 		activate_allocator();
 
 		r2engine::get()->destroy_all_entities();
 
-		if (!m_scriptState.IsEmpty()) {
+		if (m_scripted && !m_scriptState.IsEmpty()) {
 			if (!m_willBecomeActive.IsEmpty()) m_willBecomeActive.Reset();
 			if (!m_becameActive.IsEmpty()) m_becameActive.Reset();
 			if (!m_willBecomeInactive.IsEmpty()) m_willBecomeInactive.Reset();
@@ -179,111 +209,138 @@ namespace r2 {
 		}
 
 		if (m_engineData) {
-			for(auto data : *m_engineData) {
+			auto engineData = *m_engineData;
+			for(auto data : engineData) {
 				delete data;
 			}
 			delete m_engineData;
 			m_engineData = nullptr;
 		}
+
 		destroy_periodic_update();
 		destroy_event_receiver();
+
 		if (m_name) { delete m_name; m_name = nullptr; }
+
 		deactivate_allocator(true);
 	}
-
-    state_man* state::manager() const {
-        return m_mgr;
-    }
-
-	scene* state::getScene() const {
-		return m_scene;
-	}
-
-    mstring state::name() const {
-        return *m_name;
-    }
-
-    bool state::operator==(const state& rhs) const {
-        return m_name == rhs.m_name;
-    }
 
 	engine_state_data* state::get_engine_state_data(u16 factoryIdx) {
 		if (m_engineData->size() == 0) return nullptr;
 		return (*m_engineData)[factoryIdx];
 	}
 
-	void state::willBecomeActive() {
+	void state::_willBecomeActive() {
 		activate_allocator();
-		if (m_scriptState.IsEmpty()) init();
-		if (!m_willBecomeActive.IsEmpty()) {
-			m_willBecomeActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+		if (!m_engineData) init();
+
+		willBecomeActive();
+
+		if (m_scripted) {
+			if (m_scriptState.IsEmpty()) init_script_data();
+			if (!m_willBecomeActive.IsEmpty()) {
+				m_willBecomeActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+			}
 		}
+
 		deactivate_allocator(true);
 	}
 
-	void state::becameActive() {
+	void state::_becameActive() {
+		activate_allocator();
+
 		start_periodic_updates();
 
-		if (!m_becameActive.IsEmpty()) {
-			activate_allocator();
-			m_becameActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
-			deactivate_allocator(true);
+		becameActive();
+
+		if (m_scripted) {
+			if (!m_becameActive.IsEmpty()) {
+				m_becameActive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+			}
 		}
+
+		deactivate_allocator(true);
 	}
 
-	void state::willBecomeInactive() {
-		if (!m_willBecomeInactive.IsEmpty()) {
-			activate_allocator();
-			m_willBecomeInactive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
-			deactivate_allocator(true);
+	void state::_willBecomeInactive() {
+		activate_allocator();
+
+		willBecomeInactive();
+
+		if (m_scripted) {
+			if (!m_willBecomeInactive.IsEmpty()) {
+				m_willBecomeInactive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
+			}
 		}
+
+		deactivate_allocator(true);
 	}
 
-	void state::becameInactive() {
+	void state::_becameInactive() {
+		activate_allocator();
+
 		stop_periodic_updates();
 
+		becameInactive();
+
 		if (!m_becameInactive.IsEmpty()) {
-			activate_allocator();
 			m_becameInactive.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
-			deactivate_allocator(true);
 		}
+
+		deactivate_allocator(true);
 	}
 
-	void state::willBeDestroyed() {
+	void state::_willBeDestroyed() {
+		activate_allocator();
+
+		willBeDestroyed();
+
 		if (!m_willBeDestroyed.IsEmpty()) {
-			activate_allocator();
 			m_willBeDestroyed.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
-			deactivate_allocator(true);
 		}
+
+		deactivate_allocator(true);
 	}
 
 	void state::doUpdate(f32 frameDt, f32 updateDt) {
+		activate_allocator();
+
+		onUpdate(frameDt, updateDt);
+
 		if (!m_update.IsEmpty()) {
-			activate_allocator();
 			Local<Value> args[2] = {
 				to_v8(isolate, frameDt),
 				to_v8(isolate, updateDt)
 			};
 			m_update.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 2, args);
-			deactivate_allocator(true);
 		}
+
+		deactivate_allocator(true);
 	}
 
 	void state::render() {
+		activate_allocator();
+
+		onRender();
+
 		if (!m_render.IsEmpty()) {
-			activate_allocator();
 			m_render.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 0, NULL);
-			deactivate_allocator(true);
 		}
+
+		deactivate_allocator(true);
 	}
 
 	void state::handle(event* evt) {
+		activate_allocator();
+
+		onEvent(evt);
+
 		if (!m_handleEvent.IsEmpty() && !evt->is_internal_only()) {
-			activate_allocator();
 			auto param = Local<Value>::Cast(convert<event>::to_v8(isolate, *evt));
 			m_handleEvent.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptState.Get(isolate), 1, &param);
-			deactivate_allocator(true);
 		}
+
+		deactivate_allocator(true);
 	}
 
 	void state::belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired) {
@@ -306,14 +363,6 @@ namespace r2 {
 		init();
 	}
 
-	size_t state::getMaxMemorySize() const {
-		return m_memory->size();
-	}
-
-	size_t state::getUsedMemorySize() const {
-		return m_memory->used();
-	}
-
 	void state::activate_allocator() {
 		memory_man::push_current(m_memory);
 		__set_temp_engine_state_ref(this);
@@ -327,7 +376,7 @@ namespace r2 {
 
 
     state_man::state_man() {
-		m_active = 0;
+		m_active = nullptr;
         r2Log("State manager initialized");
     }
 
@@ -358,10 +407,11 @@ namespace r2 {
 			if((*i) == s) {
 				if (m_active == s) {
 					r2Warn("Unregistering currently active state \"%s\" may result in the engine becoming stateless", s->m_name->c_str());
-					m_active->willBecomeInactive();
+					m_active->_willBecomeInactive();
 					r2engine::get()->remove_child(m_active);
 					m_active = 0;
-					s->becameInactive();
+					s->_becameInactive();
+					s->releaseResources();
 				}
 				m_states.erase(i);
 				found = true;
@@ -403,23 +453,24 @@ namespace r2 {
 
 		if (m_active) {
 			state* old = m_active;
-			m_active->willBecomeInactive();
+			m_active->_willBecomeInactive();
 			r2engine::get()->remove_child(m_active);
-			old->becameInactive();
+			old->_becameInactive();
 			old->releaseResources();
 		}
 		
-		newState->willBecomeActive();
+		newState->_willBecomeActive();
 		m_active = newState;
 		r2engine::get()->add_child(m_active);
-		m_active->becameActive();
+		m_active->_becameActive();
 	}
 
 	void state_man::clearActive() {
 		if (m_active) {
-			m_active->willBecomeInactive();
+			m_active->_willBecomeInactive();
 			r2engine::get()->remove_child(m_active);
-			m_active->becameInactive();
+			m_active->_becameInactive();
+			m_active->releaseResources();
 			m_active = nullptr;
 		}
 	}

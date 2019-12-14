@@ -217,7 +217,41 @@ namespace r2 {
 		args.GetReturnValue().Set(scope.Escape(arr));
 	}
 
+	size_t mesh_component::get_max_vertex_count() {
+		if (!m_instance) {
+			r2Error("Attempted to get mesh component's max vertex count when the mesh doesn't have a valid reference to a node");
+			return 0;
+		}
+		return m_instance.node()->vertices().size();
+	}
 
+	size_t mesh_component::get_vertex_count() {
+		if (!m_instance) {
+			r2Error("Attempted to get mesh component's vertex count when the mesh doesn't have a valid reference to a node");
+			return 0;
+		}
+		return m_instance.node()->vertex_count();
+	}
+
+	size_t mesh_component::get_max_index_count() {
+		if (!m_instance) {
+			r2Error("Attempted to get mesh component's max index count when the mesh doesn't have a valid reference to a node");
+			return 0;
+		}
+		return m_instance.node()->indices().size();
+	}
+
+	size_t mesh_component::get_index_count() {
+		if (!m_instance) {
+			r2Error("Attempted to get mesh component's index count when the mesh doesn't have a valid reference to a node");
+			return 0;
+		}
+		return m_instance.node()->index_count();
+	}
+
+
+
+	mesh_sys* mesh_sys::instance = nullptr;
 	mesh_sys::mesh_sys() {
 	}
 
@@ -233,7 +267,9 @@ namespace r2 {
 	void mesh_sys::deinitialize_entity(scene_entity* entity) {
 		auto s = state();
 		s.enable();
-		if (!s->contains_entity(entity->id())) entity->unbind("add_mesh_component");
+		if (!s->contains_entity(entity->id())) {
+			entity->unbind("add_mesh_component");
+		}
 		s.disable();
 	}
 
@@ -274,6 +310,7 @@ namespace r2 {
 		entity->bind(this, "add_mesh_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->addComponentTo(entity);
 		});
+
 		entity->mesh.clear();
 	}
 

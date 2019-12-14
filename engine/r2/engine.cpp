@@ -1,10 +1,6 @@
 #include <r2/engine.h>
 #include <stdio.h>
 
-#include <r2/systems/transform_sys.h>
-#include <r2/systems/camera_sys.h>
-#include <r2/systems/mesh_sys.h>
-
 namespace r2 {
 	r2engine* r2engine::instance = nullptr;
 	log_man* r2engine::logMgr = nullptr;
@@ -66,13 +62,7 @@ namespace r2 {
 			}
 		}
 
-		if (!wasUninitialized) {
-			entity->unbind("wasInitialized");
-			entity->unbind("handleEvent");
-			entity->unbind("update");
-			entity->unbind("willBeDestroyed");
-			if (!entity->parent()) r2engine::instance->remove_child(entity);
-		}
+		if (!wasUninitialized && !entity->parent()) r2engine::instance->remove_child(entity);
 
 		ref.disable();
 	}
@@ -80,9 +70,9 @@ namespace r2 {
 	void r2engine::create(int argc, char** argv) {
 		if (instance) return;
 
-		r2engine::register_system(new transform_sys());
-		r2engine::register_system(new camera_sys());
-		r2engine::register_system(new mesh_sys());
+		r2engine::register_system(transform_sys::get());
+		r2engine::register_system(camera_sys::get());
+		r2engine::register_system(mesh_sys::get());
 
 		logMgr = new log_man();
 		instance = new r2engine(argc, argv);
@@ -140,7 +130,6 @@ namespace r2 {
     }
 
     r2engine::~r2engine() {
-		
 		m_stateMgr->clearActive();				// depends on script manager, entities
 		m_stateMgr->destroyStates();			// depends on script manager, entities
 
@@ -248,17 +237,23 @@ namespace r2 {
 			if (!data->read(entity)) {
 				r2Error("Failed to read pointer to entity to delete. Not deleting.");
 			} else {
-				entity->destroy();
+				entity->deferred_destroy();
 				delete entity;
 			}
 		}
     }
+
+	void r2engine::activate_state(const mstring& name) {
+		event e = evt(EVT_NAME_ACTIVATE_STATE, true, false);
+		e.data()->write_string(name);
+		dispatchAtFrameStart(&e);
+	}
 	
 	void r2engine::destroy_all_entities() {
 		m_entities.enable();
 		auto entities = *m_entities->entities;
 		for (auto entity : entities) {
-			entity->destroy();
+			entity->deferred_destroy();
 			delete entity;
 		}
 		m_entities->entities->clear();
@@ -271,11 +266,6 @@ namespace r2 {
 
 		auto entities = *m_entities->uninitializedEntities;
 		for(scene_entity* entity : entities) {
-			entity->bind("wasInitialized");
-			entity->bind("handleEvent");
-			entity->bind("update");
-			entity->bind("willBeDestroyed");
-
 			if (!entity->parent()) this->add_child(entity);
 			entity->initialize();
 			m_entities->entities->push_front(entity);
@@ -320,11 +310,11 @@ namespace r2 {
 
 			for(entity_system* sys : r2engine::systems) sys->tick(dt);
 
-			timer t;
-			t.start();
+			//timer t;
+			//t.start();
 			update_entities(dt);
-			f32 ut = t;
-			printf("update_entities took %f ms\n", ut * 1000.0f);
+			//f32 ut = t;
+			//printf("update_entities took %f ms\n", ut * 1000.0f);
 
 			scene* currentScene = current_scene();
 			if (currentScene) currentScene->render();

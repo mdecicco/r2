@@ -13,6 +13,7 @@ namespace r2 {
 
 	class entity_system;
 	class scene_entity_component;
+	class entity_system_state;
 
 	bool __component_exists(entity_system* sys, componentId id);
 	scene_entity_component* __get_component(entity_system* sys, componentId id);
@@ -20,34 +21,35 @@ namespace r2 {
 	template <typename component_ptr_type>
 	class component_ref {
 		public:
-			component_ref() : id(0), sys(nullptr) { }
-			component_ref(const component_ref& o) : id(o.id), sys(o.sys) { }
-			component_ref(entity_system* _sys, componentId _id) : sys(_sys), id(_id) { }
-			~component_ref() { id = 0; sys = nullptr; }
-
-			operator bool() {
-				if (id == 0 || !sys) return false;
-				return __component_exists(sys, id);
+			component_ref() : id(0), state(nullptr) { }
+			component_ref(const component_ref& o) : id(o.id), state(o.state) { }
+			component_ref(entity_system* sys, componentId _id) : state(nullptr), id(_id) {
+				auto s = sys->state();
+				s.enable();
+				state = s.get();
+				s.disable();
 			}
+			~component_ref() { id = 0; state = nullptr; }
 
-			component_ptr_type operator->() {
-				return (component_ptr_type)__get_component(sys, id);
-			}
+			operator bool();
 
-			component_ptr_type get() {
-				return (component_ptr_type)__get_component(sys, id);
-			}
+			component_ptr_type operator->();
+
+			component_ptr_type get();
 
 			void clear() {
 				id = 0;
-				sys = nullptr;
+				state = nullptr;
 			}
 
 		protected:
 			friend class entity_system;
+			friend class mesh_sys;
+			friend class transform_sys;
+			friend class camera_sys;
 
 			componentId id;
-			entity_system* sys;
+			entity_system_state* state;
 	};
 
 	class transform_component;
@@ -57,18 +59,20 @@ namespace r2 {
 	class scene_entity : public event_receiver, public periodic_update {
 		public:
 			scene_entity(v8Args args);
-			~scene_entity();
+			scene_entity(const mstring& name);
+			virtual ~scene_entity();
 
+			/* Accessors */
 			inline entityId id() const { return m_id; }
+			inline const mstring& name() const { return *m_name; }
+			inline bool destroyed() { return m_destroyed; }
+			inline bool is_scripted() { return m_scripted; }
+			inline scene_entity* parent() const { return m_parent; }
 
+			/* Functions for scripted entities */
 			void call(const mstring& function, u8 argc = 0, LocalValueHandle* args = nullptr);
-
-			// find function on entity, make it callable via scene_entity::call
-			bool bind(const mstring& function);
-
-			// bind c++ function to entity object
-			bool bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args));
-			
+			bool bind(const mstring& function); // find function on entity, make it callable via scene_entity::call
+			bool bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args)); // bind c++ function to entity object
 			bool bind(scene_entity_component* component, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set = v8::Local<v8::Function>(), v8::PropertyAttribute attribute = v8::PropertyAttribute::None);
 
 			template<typename T, typename U, typename C = U (*)(const U&, const U&)>
@@ -136,33 +140,33 @@ namespace r2 {
 
 			void unbind(const mstring& functionOrProp);
 
-			inline const mstring& name() const { return *m_name; }
-
+			/* Functions for classes deriving from this */
+			virtual void onInitialize() { }
+			virtual void onUpdate(f32 frameDt, f32 updateDt) { }
+			virtual void onEvent(event* evt) { }
+			virtual void willBeDestroyed() { }
+			
+			/* Functions for both */
 			void destroy();
-
-			// this gets called from scripts to prevent mid-frame destruction of entities
-			void deferred_destroy();
-
-			inline bool destroyed() { return m_destroyed; }
-
-			void initialize();
-
-			virtual void handle(event* evt);
-
-			virtual void doUpdate(f32 frameDt, f32 updateDt);
-
-			virtual void belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired);
-
 			void add_child_entity(scene_entity* entity);
 			void remove_child_entity(scene_entity* entity);
-			inline scene_entity* parent() const { return m_parent; }
-
+	
+			/* For convenience */
 			component_ref<transform_component*> transform;
 			component_ref<camera_component*> camera;
 			component_ref<mesh_component*> mesh;
 
 		private:
+			friend class r2engine;
+			friend class entity_system;
+
 			bool ensure_object_handle();
+			void initialize();
+			void deferred_destroy();
+
+			virtual void handle(event* evt);
+			virtual void doUpdate(f32 frameDt, f32 updateDt);
+			virtual void belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired);
 
 			static entityId nextEntityId;
 			v8::Isolate* isolate;
@@ -174,6 +178,7 @@ namespace r2 {
 			mstring* m_name;
 			entityId m_id;
 			bool m_destroyed;
+			bool m_scripted;
 	};
 
 	class entity_system_state : public engine_state_data {
@@ -206,6 +211,12 @@ namespace r2 {
 			template <typename T>
 			void for_each(void (*callback)(T*, size_t, bool&)) {
 				m_components->for_each<T>(callback);
+			}
+			
+			template <typename T, typename F>
+			void for_each(F&& callback) {
+				using F_type = typename std::decay<F>::type;
+				m_components->for_each<T, F>(std::forward<F_type>(callback));
 			}
 
 		protected:
@@ -271,6 +282,7 @@ namespace r2 {
 
 			inline componentId id() const { return m_id; }
 			inline entity_system* system() const { return m_system; }
+			inline scene_entity* entity() const { return m_entity; }
 
 
 			/* For getting properties that are relative to the parent's same property,
@@ -309,4 +321,20 @@ namespace r2 {
 			entity_system* m_system;
 			scene_entity* m_entity;
 		};
+
+	template <typename component_ptr_type>
+	component_ptr_type component_ref<component_ptr_type>::get() {
+		if (id == 0 || !state) return nullptr;
+		return (component_ptr_type)state->component(id);
+	}
+	template <typename component_ptr_type>
+	component_ptr_type component_ref<component_ptr_type>::operator->() {
+		if (id == 0 || !state) return nullptr;
+		return (component_ptr_type)state->component(id);
+	}
+	template <typename component_ptr_type>
+	component_ref<component_ptr_type>::operator bool() {
+		if (id == 0 || !state) return false;
+		return state->contains_component(id);
+	}
 };

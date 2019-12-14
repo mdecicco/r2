@@ -135,6 +135,18 @@ namespace r2 {
 		ins_bo_segment seg = m_instanceData.sub(idx, idx + 1, memBegin, memEnd);
 		m_instanceData.buffer->update(seg, data);
 	}
+
+	void* render_node::instance_data(instanceId id) {
+		auto i = m_instanceIndices.find(id);
+		if (i == m_instanceIndices.end()) {
+			r2Error("render_node_instance %llu is invalid has no instance data", id);
+			return nullptr;
+		}
+
+		size_t idx = i->second;
+		size_t instanceSize = m_instanceData.buffer->format()->size();
+		return ((u8*)m_instanceData.buffer->data()) + m_instanceData.memBegin + (idx * instanceSize);
+	}
 	
 	void render_node::update_vertices_raw(instanceId id, const void* data, size_t count) {
 		auto i = m_instanceIndices.find(id);
@@ -153,6 +165,10 @@ namespace r2 {
 		m_vertexCount = count;
 	}
 
+	void* render_node::vertex_data() {
+		return ((u8*)m_vertexData.buffer->data()) + m_vertexData.memBegin;
+	}
+
 	void render_node::update_indices_raw(instanceId id, const void* data, size_t count) {
 		auto i = m_instanceIndices.find(id);
 		if (i == m_instanceIndices.end()) {
@@ -168,6 +184,10 @@ namespace r2 {
 		size_t size = m_indexData.buffer->type();
 		m_indexData.buffer->update(m_indexData.sub(0, count, 0, count * size), data);
 		m_indexCount = count;
+	}
+
+	void* render_node::index_data() {
+		return ((u8*)m_indexData.buffer->data()) + m_indexData.memBegin;
 	}
 	
 	bool render_node::instance_valid(instanceId id) const {
