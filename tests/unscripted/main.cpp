@@ -37,7 +37,7 @@ render_node* load_obj(const mstring& obj, scene* destScene) {
 		}
 		r2engine::get()->files()->destroy(file);
 
-		shader_program* shader = destScene->load_shader("./resource/mesh_component_test/shader.glsl", "shader");
+		shader_program* shader = destScene->load_shader("./resource/unscripted_test/shader.glsl", "shader");
 		if (!shader) {
 			r2Error("Failed to load shader\n");
 			return nullptr;
@@ -423,7 +423,7 @@ class test_state : public state {
 			// memory_man::[push/pop]_current)
 			setUpdateFrequency(1.0f);
 			camera = new camera_entity();
-			mesh = load_obj("./resource/mesh_component_test/teapot.obj", getScene());
+			mesh = load_obj("./resource/unscripted_test/teapot.obj", getScene());
 			cubes = new dynamic_pod_array<test_entity*>();
 			for(u32 i = 0;i < INSTANCE_COUNT;i++) {
 				cubes->push(new test_entity(mesh));
