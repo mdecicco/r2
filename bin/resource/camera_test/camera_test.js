@@ -1,6 +1,5 @@
-const {
-	ObjFile
-} = require('obj');
+const { ObjFile } = require('obj');
+const { Camera } = require('camera');
 
 function format_size(sz) {
 	let mult = 1.0;
@@ -31,9 +30,7 @@ class CameraTestState extends engine.State {
 		ifmt.addAttr(gfx.InstanceAttrType.mat4f);
 		mfmt.addAttr("color", gfx.UniformAttrType.vec3f);
 		
-		const transform = Transform3D.translation(new vec3f(0, 0, 0));
-		transform.mulEq(Transform3D.rotation(new vec3f(0, 0, 1), 90));
-		transform.mulEq(Transform3D.scale(new vec3f(1.25, 1.25, 1.25)));
+		const transform = Transform3D.scale(new vec3f(1.25, 1.25, 1.25));
 		
 		const info = o.makeNode(vfmt, ifmt, [{ transform }]);
 		
@@ -42,6 +39,8 @@ class CameraTestState extends engine.State {
 		
 		info.node.material_instance = material.instantiate();
 		info.node.material_instance.uniforms.vec3f("color", new vec3f(0.75, 0.1, 0.2));
+		
+		const camera = new Camera();
 	}
 	render = () => {
 		ImGui.Text(`Memory: ${format_size(this.used_memory)} / ${format_size(this.max_memory)}`);

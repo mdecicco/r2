@@ -4,6 +4,19 @@
 #include <v8pp/convert.hpp>
 
 using namespace v8;
+namespace v8pp {
+	template<>
+	struct convert<r2::log_info> {
+		using from_type = r2::log_info;
+		using to_type = v8::Handle<v8::Object>;
+
+		static bool is_valid(v8::Isolate* isolate, v8::Handle<v8::Value> value);
+
+		static r2::log_info from_v8(v8::Isolate* isolate, v8::Handle<v8::Object> obj);
+
+		static v8::Handle<v8::Object> to_v8(v8::Isolate* isolate, r2::log_info const& value);
+	};
+};
 using namespace v8pp;
 
 namespace r2 {
@@ -165,6 +178,10 @@ namespace r2 {
 		args.GetReturnValue().Set(engine->open_window(v_width, v_height, v_title, v_can_resize, v_fullscreen));
 	}
 
+	vec2i window_size() {
+		return r2engine::get()->window()->get_size();
+	}
+
 	void register_state(state* s) {
 		r2engine::get()->states()->register_state(s);
 	}
@@ -175,6 +192,10 @@ namespace r2 {
 		e.data()->write_string(stateName);
 
 		r2engine::get()->dispatchAtFrameStart(&e);
+	}
+
+	f32 fps() {
+		return r2engine::get()->fps();
 	}
 
 	size_t kb2b(size_t kb) { return KBtoB(kb); }
@@ -211,7 +232,7 @@ namespace r2 {
 			s.ctor<v8Args>();
 			register_class_state(s);
 			s.set("id", property(&scene_entity::id));
-			s.set("destroy", &scene_entity::deferred_destroy);
+			s.set("destroy", &scene_entity::destroy);
 			s.set("set_update_frequency", &scene_entity::setUpdateFrequency);
 			s.set("add_child", &scene_entity::add_child_entity);
 			s.set("remove_child", &scene_entity::remove_child_entity);
@@ -226,8 +247,10 @@ namespace r2 {
 		m.set("dispatch", &dispatch);
 		m.set("logs", &logs);
 		m.set("open_window", &open_window);
+		m.set("window_size", &window_size);
 		m.set("register_state", &register_state);
 		m.set("activate_state", &activate_state);
+		m.set("frame_rate", &fps);
 
 		module mem(isolate);
 		mem.set("Kilobytes", kb2b);

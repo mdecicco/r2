@@ -5,6 +5,23 @@ using namespace v8;
 using namespace v8pp;
 
 namespace r2 {
+	bool __component_exists(entity_system* sys, componentId id) {
+		auto state = sys->state();
+		state.enable();
+		bool valid = state->contains_component(id);
+		state.disable();
+		return valid;
+	}
+
+	scene_entity_component* __get_component(entity_system* sys, componentId id) {
+		auto state = sys->state();
+		state.enable();
+		auto comp = state->component(id);
+		state.disable();
+		return comp;
+	}
+
+
 	entityId scene_entity::nextEntityId = 1;
 	scene_entity::scene_entity(v8Args args)
 		: m_id(scene_entity::nextEntityId++), m_name(nullptr), m_scriptFuncs(nullptr), m_destroyed(false), m_parent(nullptr), m_children(nullptr) {
@@ -29,17 +46,42 @@ namespace r2 {
 
 		m_scriptFuncs = new munordered_map<mstring, PersistentFunctionHandle>();
 		m_children = new mlist<scene_entity*>();
+
+		initialize_periodic_update();
+		initialize_event_receiver();
 		r2engine::entity_created(this);
+
+		m_scripted = true;
+		m_doesUpdate = false;
+	}
+
+	scene_entity::scene_entity(const mstring& name)
+		: m_id(scene_entity::nextEntityId++), m_name(nullptr), m_scriptFuncs(nullptr), m_destroyed(false), m_parent(nullptr), m_children(nullptr), isolate(nullptr) {
+		m_name = new mstring(name);
+		m_children = new mlist<scene_entity*>();
+
+		initialize_periodic_update();
+		initialize_event_receiver();
+		r2engine::entity_created(this);
+		
+		m_scripted = false;
+		m_doesUpdate = false;
 	}
 
 	scene_entity::~scene_entity() {
-		if (!m_destroyed) destroy();
+		if (!m_destroyed) deferred_destroy();
 		delete m_name;
-		delete m_scriptFuncs;
+		m_name = nullptr;
+		if (m_scriptFuncs) {
+			delete m_scriptFuncs;
+			m_scriptFuncs = nullptr;
+		}
 		delete m_children;
+		m_children = nullptr;
 	}
 
 	void scene_entity::call(const mstring& function, u8 argc, LocalValueHandle* args) {
+		if (!m_scripted) return;
 		if (m_scriptObj.IsEmpty()) return;
 
 		auto funcIter = m_scriptFuncs->find(function);
@@ -57,16 +99,21 @@ namespace r2 {
 	}
 
 	bool scene_entity::bind(const mstring& function) {
+		if (!m_scripted) return false;
 		if (!ensure_object_handle()) return false;
 
 		LocalValueHandle maybeFunc = LocalObjectHandle::Cast(m_scriptObj.Get(isolate))->Get(v8str(function.c_str()));
 		if (!maybeFunc->IsUndefined() && !maybeFunc->IsFunction()) {
 			r2Warn("Entity \"%s\" has a \"%s\" property, but it is not a function", m_name->c_str(), function.c_str());
 			return false;
-		} else if (!maybeFunc->IsUndefined()) (*m_scriptFuncs)[function].Reset(isolate, LocalFunctionHandle::Cast(maybeFunc));
+		} else if (!maybeFunc->IsUndefined()) {
+			if (function == "update") m_doesUpdate = true;
+			(*m_scriptFuncs)[function].Reset(isolate, LocalFunctionHandle::Cast(maybeFunc));
+		}
 	}
 
 	bool scene_entity::bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args)) {
+		if (!m_scripted) return false;
 		if (!ensure_object_handle()) return false;
 
 		auto func = [system, this, callback](v8Args args) {
@@ -76,8 +123,21 @@ namespace r2 {
 		LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
 		return obj->Set(v8str(function.c_str()), wrap_function(isolate, function.c_str(), func));
 	}
+
+	bool scene_entity::bind(scene_entity_component* component, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set, v8::PropertyAttribute attribute) {
+		if (!m_scripted) return false;
+		if (!ensure_object_handle()) return false;
+
+		v8::Isolate* isolate = r2engine::isolate();
+
+		LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+		obj->SetAccessorProperty(v8str(prop.c_str()), get, set, attribute);
+
+		return true;
+	}
 	
 	bool scene_entity::ensure_object_handle() {
+		if (!m_scripted) return false;
 		if (m_scriptObj.IsEmpty()) {
 			LocalValueHandle self = convert<scene_entity>::to_v8(isolate, *this);
 			if (self.IsEmpty() || self->IsNullOrUndefined()) return false;
@@ -87,10 +147,12 @@ namespace r2 {
 	}
 
 	void scene_entity::unbind(const mstring& functionOrProp) {
+		if (!m_scripted) return;
 		auto func = m_scriptFuncs->find(functionOrProp);
 		if (func != m_scriptFuncs->end()) {
 			func->second.Reset();
 			m_scriptFuncs->erase(functionOrProp);
+			if (functionOrProp == "update") m_doesUpdate = false;
 			return;
 		}
 
@@ -106,8 +168,12 @@ namespace r2 {
 		}
 	}
 
-	void scene_entity::destroy() {
-		if (!m_scriptObj.IsEmpty()) {
+	void scene_entity::deferred_destroy() {
+		m_destroyed = true;
+
+		willBeDestroyed();
+
+		if (m_scripted && !m_scriptObj.IsEmpty()) {
 			auto funcIter = m_scriptFuncs->find("willBeDestroyed");
 			if (funcIter != m_scriptFuncs->end()) {
 				PersistentFunctionHandle func = funcIter->second;
@@ -119,57 +185,104 @@ namespace r2 {
 			}
 		}
 
-		for(auto fpair : *m_scriptFuncs) {
-			fpair.second.Reset();
-		}
-		m_scriptFuncs->clear();
+		r2engine::entity_destroyed(this);
 
 		stop_periodic_updates();
 		destroy_periodic_update();
+		destroy_event_receiver();
 
-		r2engine::entity_destroyed(this);
-		if (!m_scriptObj.IsEmpty()) {
-			m_scriptObj.Reset();
-			class_<scene_entity, raw_ptr_traits>::destroy_object(isolate, this);
+		if (m_scripted) {
+			auto funcs = *m_scriptFuncs;
+			for(auto fpair : funcs) {
+				fpair.second.Reset();
+
+				if (!m_scriptObj.IsEmpty()) {
+					// just in case the entity still exists in JS, unbind all C++ functions and component property accessors
+					LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+					auto ctx = isolate->GetCurrentContext();
+
+					auto key = v8str(fpair.first.c_str());
+
+					bool deleted = obj->Delete(ctx, key).FromJust();
+					if (!deleted) {
+						r2Error("Failed to delete property \"%s\" on entity \"%s\"", fpair.first.c_str(), m_name->c_str());
+					}
+				}
+			}
+			m_scriptFuncs->clear();
+
+			if (!m_scriptObj.IsEmpty()) {
+				m_scriptObj.Reset();
+				class_<scene_entity, raw_ptr_traits>::destroy_object(isolate, this);
+			}
 		}
 	}
 
-	void scene_entity::deferred_destroy() {
+	void scene_entity::set_name(const mstring& name) {
+		delete m_name;
+		m_name = new mstring(name);
+	}
+
+	void scene_entity::destroy() {
 		if (m_destroyed) {
 			r2Error("Entity \"%s\" was already destroyed", m_name->c_str());
 		}
+
 
 		for(auto child : *m_children) child->deferred_destroy();
 
 		m_destroyed = true;
 
-		trace t(r2engine::isolate());
-		event e(t.file, t.line, EVT_NAME_DESTROY_ENTITY, true, false);
-		e.data()->write(this);
-
-		r2engine::get()->dispatchAtFrameStart(&e);
+		if (m_scripted) {
+			trace t(r2engine::isolate());
+			event e(t.file, t.line, EVT_NAME_DESTROY_ENTITY, true, false);
+			e.data()->write(this);
+			r2engine::get()->dispatchAtFrameStart(&e);
+		} else {
+			event e = evt(EVT_NAME_DESTROY_ENTITY, true, false);
+			e.data()->write(this);
+			r2engine::get()->dispatchAtFrameStart(&e);
+		}
 	}
 
 	void scene_entity::initialize() {
-		initialize_periodic_update();
 		start_periodic_updates();
 
+		onInitialize();
+
+		if (!m_scripted) return;
 		if (m_scriptObj.IsEmpty()) return;
 
-		auto funcIter = m_scriptFuncs->find("wasInitialized");
-		if (funcIter == m_scriptFuncs->end()) return;
+		bind("handleEvent");
+		bind("update");
+		bind("willBeDestroyed");
+		if(bind("wasInitialized")) call("wasInitialized");
+	}
 
-		PersistentFunctionHandle func = funcIter->second;
-		if (func.IsEmpty()) return;
+	void scene_entity::updatesStarted() {
+		if (m_doesUpdate) return;
+		m_doesUpdate = true;
 
-		TryCatch tc(isolate);
-		func.Get(isolate)->Call(isolate->GetCurrentContext(), m_scriptObj.Get(isolate), 0, nullptr);
-		check_script_exception(isolate, tc);
+		event e = evt(EVT_NAME_ENABLE_ENTITY_UPDATES, true, false);
+		e.data()->write(this);
+		r2engine::get()->dispatchAtFrameStart(&e);
+	}
+
+	void scene_entity::updatesStopped() {
+		if (!m_doesUpdate) return;
+		m_doesUpdate = false;
+
+		event e = evt(EVT_NAME_DISABLE_ENTITY_UPDATES, true, false);
+		e.data()->write(this);
+		r2engine::get()->dispatchAtFrameStart(&e);
 	}
 
 	void scene_entity::handle(event* evt) {
-		if (evt->is_internal_only() || m_scriptObj.IsEmpty()) return;
+		if (evt->is_internal_only()) return;
 
+		onEvent(evt);
+		
+		if(!m_scripted || m_scriptObj.IsEmpty()) return;
 
 		auto funcIter = m_scriptFuncs->find("handleEvent");
 		if (funcIter == m_scriptFuncs->end()) return;
@@ -184,7 +297,9 @@ namespace r2 {
 	}
 
 	void scene_entity::doUpdate(f32 frameDt, f32 updateDt) {
-		if (m_scriptObj.IsEmpty()) return;
+		onUpdate(frameDt, updateDt);
+
+		if (!m_scripted || m_scriptObj.IsEmpty()) return;
 		
 		auto funcIter = m_scriptFuncs->find("update");
 		if (funcIter == m_scriptFuncs->end()) return;
@@ -233,6 +348,15 @@ namespace r2 {
 		r2engine::get()->add_child(entity);
 	}
 
+	mvector<scene_entity*> scene_entity::children() {
+		mvector<scene_entity*> result;
+		mlist<scene_entity*>& l = *m_children;
+		for (scene_entity* e : l) {
+			result.push_back(e);
+		}
+		return result;
+	}
+
 
 
 	componentId scene_entity_component::nextComponentId = 1;
@@ -244,24 +368,20 @@ namespace r2 {
 
 
 
-	entity_system_state::entity_system_state()
-		: m_components(nullptr), m_newOffset(0), m_maxSize(0), m_count(0), m_componentSize(0), m_furthestComponentId(0), m_furthestComponentOffset(0) {
-		m_componentOffsets = new munordered_map<componentId, size_t>();
+	entity_system_state::entity_system_state(size_t componentSize) {
+		m_components = new untyped_associative_pod_array<componentId>(componentSize);
 		m_entityComponentIds = new munordered_map<entityId, componentId>();
 		m_uninitializedEntities = new mvector<scene_entity*>();
 	}
 
 	entity_system_state::~entity_system_state() {
-		if (m_components) delete[] m_components;
-		delete m_componentOffsets;
+		delete m_components;
 		delete m_entityComponentIds;
 		delete m_uninitializedEntities;
 	}
 
 	scene_entity_component* entity_system_state::component(componentId id) {
-		auto off = m_componentOffsets->find(id);
-		if (off == m_componentOffsets->end()) return nullptr;
-		return (scene_entity_component*)(((u8*)m_components) + off->second);
+		return (scene_entity_component*)m_components->get(id);
 	}
 
 	scene_entity_component* entity_system_state::entity(entityId id) {
@@ -271,70 +391,28 @@ namespace r2 {
 			return nullptr;
 		}
 
-		auto off = m_componentOffsets->find(ecomp->second);
-		if (off == m_componentOffsets->end()) return nullptr;
-		return (scene_entity_component*)(((u8*)m_components) + off->second);
+		return (scene_entity_component*)m_components->get(ecomp->second);
 	}
 
 	bool entity_system_state::contains_entity(entityId id) {
 		return m_entityComponentIds->count(id) > 0;
 	}
 
-	void entity_system_state::destroy(entityId forEntity) {
-		if (m_count == 0) return;
-		for(auto comp : *m_componentOffsets) {
-			printf("(%d, %d) ", comp.first, comp.second);
-		}
-		printf("\n");
-
-		auto ecomp = m_entityComponentIds->find(forEntity);
-		if (ecomp == m_entityComponentIds->end()) {
-			r2Error("Failed to find entity %d in system, not destroying", forEntity);
-			return;
-		}
-
-		auto iter = m_componentOffsets->find(ecomp->second);
-		if (iter == m_componentOffsets->end()) {
-			r2Error("Failed to find component %d in system, not destroying", ecomp->second);
-			return;
-		}
-
-		m_entityComponentIds->erase(ecomp);
-
-		size_t off = iter->second;
-		m_componentOffsets->erase(iter);
-
-		if (ecomp->second != m_furthestComponentId) {
-			// Move the furthest component into the slot made by the destruction
-			// of this component
-			size_t srcOffset = m_furthestComponentOffset;
-			(*m_componentOffsets)[m_furthestComponentId] = off;
-			memcpy(((u8*)m_components) + off, ((u8*)m_components) + srcOffset, m_componentSize);
-		}
-
-		m_furthestComponentId = 0;
-		m_furthestComponentOffset = 0;
-
-		for(auto comp : *m_componentOffsets) {
-			if (comp.second > m_furthestComponentOffset) {
-				m_furthestComponentId = comp.first;
-				m_furthestComponentOffset = comp.second;
-			}
-		}
-
-		m_count--;
-		m_newOffset -= m_componentSize;
+	bool entity_system_state::contains_component(componentId id) {
+		return m_components->has(id);
 	}
 
-	size_t entity_system_state::allocate_offset_for_new_component() {
-		if (m_newOffset == m_maxSize) {
-			r2Error("Derived entity processing system does not have a high enough max component count to accomodate a new component");
-			return -1;
+	void entity_system_state::destroy(entityId forEntity) {
+		auto ecomp = m_entityComponentIds->find(forEntity);
+		if (ecomp == m_entityComponentIds->end()) {
+			r2Error("Failed to find entity %d in system", forEntity);
+			return;
 		}
 
-		size_t off = m_newOffset;
-		m_newOffset += m_componentSize;
-		return off;
+		scene_entity_component* comp = (scene_entity_component*)m_components->get(ecomp->second);
+		m_components->remove(ecomp->second);
+		m_entityComponentIds->erase(ecomp);
+		comp->destroy();
 	}
 
 
@@ -342,14 +420,7 @@ namespace r2 {
 	entity_system_state_factory::entity_system_state_factory(entity_system* sys) : system(sys) { }
 
 	engine_state_data* entity_system_state_factory::create() {
-		auto data = new entity_system_state();
-		data->m_componentSize = system->component_size();
-		data->m_maxSize = system->max_component_count() * system->component_size();
-		if (data->m_maxSize == 0) {
-			r2Warn("Derived entity processing system returned 0 for either component size or max component count");
-			return data;
-		}
-		data->m_components = new u8[data->m_maxSize];
+		auto data = new entity_system_state(system->component_size());
 		return data;
 	}
 
@@ -370,6 +441,7 @@ namespace r2 {
 		}
 		scene_entity_component* comp = create_component(entity->id());
 		comp->m_system = this;
+		comp->m_entity = entity;
 		bind(comp, entity);
 		m_state.disable();
 	}
@@ -390,7 +462,13 @@ namespace r2 {
 		auto fac = new entity_system_state_factory(this);
 		auto stateMgr = r2engine::get()->states();
 		m_state = stateMgr->register_state_data_factory<entity_system_state>(fac);
+		initialize_event_receiver();
 		initialize();
+	}
+
+	void entity_system::_deinitialize() {
+		destroy_event_receiver();
+		deinitialize();
 	}
 
 	void entity_system::_entity_added(scene_entity* entity) {
@@ -413,14 +491,14 @@ namespace r2 {
 			m_state->destroy(entity->id());
 		}
 
-		m_state.disable();
-
 		deinitialize_entity(entity);
+		m_state.disable();
 	}
 
 	void entity_system::initialize_entities() {
 		m_state.enable();
-		for (scene_entity* entity : *m_state->m_uninitializedEntities) {
+		auto& entities = *m_state->m_uninitializedEntities;
+		for (scene_entity* entity : entities) {
 			initialize_entity(entity);
 		}
 		m_state->m_uninitializedEntities->clear();

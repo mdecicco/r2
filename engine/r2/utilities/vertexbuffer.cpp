@@ -99,7 +99,7 @@ namespace r2 {
 		return m_data;
 	}
     vtx_bo_segment vertex_buffer::append(const void *data, size_t count) {
-        if(count >= m_maxCount - m_vertexCount) {
+        if(count > m_maxCount - m_vertexCount) {
             r2Error("Insufficient space in vertex buffer of format [%s] for %d vertices (%d max) (buf: %d)", m_format->to_string().c_str(), count, m_maxCount, m_id);
             vtx_bo_segment seg;
             seg.buffer = nullptr;
@@ -121,4 +121,28 @@ namespace r2 {
 
         return seg;
     }
+
+	void vertex_buffer::update(const vtx_bo_segment& seg, const void* data) {
+		if (!seg.is_valid()) {
+			r2Error("Attempted to update invalid segment of vertex buffer. Ignoring");
+			return;
+		}
+		if (seg.buffer != this) {
+			r2Error("Segment for another uniform buffer passed to vertex_buffer::update");
+			return;
+		}
+
+		if (seg.memBegin > m_format->size() * m_vertexCount) {
+			r2Error("Out of range segment.memBegin (%llu) provided to vertex_buffer::update", seg.memBegin);
+			return;
+		}
+
+		if (seg.memEnd > m_format->size() * m_vertexCount) {
+			r2Error("Out of range segment.memEnd (%llu) provided to vertex_buffer::update", seg.memEnd);
+			return;
+		}
+
+		memcpy((u8*)m_data + seg.memBegin, data, seg.memsize());
+		updated(seg.memBegin, seg.memEnd);
+	}
 }

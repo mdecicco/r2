@@ -11,8 +11,11 @@ namespace r2 {
     class render_node;
 	class vertex_format;
 	class instance_format;
+	class uniform_format;
 	enum uniform_attribute_type;
 	class uniform_block;
+	class texture_buffer;
+	class render_buffer;
 
 	class shader_program : public asset {
 		public:
@@ -26,7 +29,7 @@ namespace r2 {
 			virtual void deactivate() = 0;
 			virtual bool check_compatible(render_node* node) = 0;
 
-			virtual u32 get_uniform_location(const mstring& name) = 0;
+			virtual i32 get_uniform_location(const mstring& name) = 0;
 			virtual void uniform1i(u32 loc, i32 value) = 0;
 			virtual void uniform2i(u32 loc, i32 v0, i32 v1) = 0;
 			virtual void uniform3i(u32 loc, i32 v0, i32 v1, i32 v2) = 0;
@@ -77,6 +80,7 @@ namespace r2 {
 			virtual void uniform_matrix_4x2f(u32 loc, u32 count, f32* values) = 0;
 			virtual void uniform_matrix_4x3d(u32 loc, u32 count, f64* values) = 0;
 			virtual void uniform_matrix_4x3f(u32 loc, u32 count, f32* values) = 0;
+			virtual void texture2D(u32 loc, u32 index, texture_buffer* texture) = 0;
 	};
 
     class render_driver {
@@ -94,12 +98,21 @@ namespace r2 {
 			virtual void unbind_vao() { }
 			virtual void sync_buffer(gpu_buffer* buf) = 0;
 			virtual void free_buffer(gpu_buffer* buf) = 0;
+			virtual void sync_texture(texture_buffer* buf) = 0;
+			virtual void free_texture(texture_buffer* buf) = 0;
+			virtual void present_texture(texture_buffer* buf, shader_program* shader, render_buffer* target = 0) = 0;
+			virtual void sync_render_target(render_buffer* buf) = 0;
+			virtual void free_render_target(render_buffer* buf) = 0;
+			virtual void bind_render_target(render_buffer* buf) = 0;
+			virtual void fetch_render_target_pixel(render_buffer* buf, u32 x, u32 y, size_t attachmentIdx, void* dest, size_t pixelSize) = 0;
 			virtual void bind_uniform_block(shader_program* shader, uniform_block* uniforms) = 0;
+			virtual void clear_framebuffer(const vec4f& color, bool clearDepth) = 0;
+			virtual void set_viewport(const vec2i& position, const vec2i& dimensions) = 0;
 
 			// Certain drivers will pad values in uniform blocks, so the uniform
 			// buffer formats will need to account for this ahead of time
-			virtual size_t get_uniform_attribute_size(uniform_attribute_type type) const;
-			virtual void serialize_uniform_value(const void* input, void* output, uniform_attribute_type type) const;
+			virtual size_t get_uniform_attribute_size(uniform_format* fmt, u16 idx, uniform_attribute_type type) const;
+			virtual void serialize_uniform_value(const void* input, void* output, uniform_format* fmt, u16 idx, uniform_attribute_type type) const;
 
 			// Certain drivers require uniform blocks stored in a buffer to be aligned
 			// to a specific value

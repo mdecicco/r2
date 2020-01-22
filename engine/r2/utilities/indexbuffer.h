@@ -13,6 +13,17 @@ namespace r2 {
     class index_buffer;
     struct idx_bo_segment : public gpu_buffer_segment {
 		idx_bo_segment() : gpu_buffer_segment(), buffer(nullptr) { }
+
+		idx_bo_segment sub(size_t _begin, size_t _end, size_t _memBegin, size_t _memEnd) {
+			idx_bo_segment seg;
+			seg.begin = begin + _begin;
+			seg.end = begin + _end;
+			seg.memBegin = memBegin + _memBegin;
+			seg.memEnd = memBegin + _memEnd;
+			seg.buffer = buffer;
+			return seg;
+		}
+
         index_buffer* buffer;
     };
 
@@ -25,6 +36,7 @@ namespace r2 {
 			virtual void* data() const;
 
             idx_bo_segment append(const void* data, size_t count);
+			void update(const idx_bo_segment& segment, const void* data);
 
         protected:
             index_type m_type;

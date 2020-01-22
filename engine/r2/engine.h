@@ -6,9 +6,15 @@
 #include <r2/managers/fileman.h>
 #include <r2/managers/scriptman.h>
 #include <r2/managers/renderman.h>
+#include <r2/managers/inputman.h>
+#include <r2/managers/audioman.h>
 #include <r2/managers/memman.h>
 
 #include <r2/systems/entity.h>
+#include <r2/systems/transform_sys.h>
+#include <r2/systems/camera_sys.h>
+#include <r2/systems/mesh_sys.h>
+#include <r2/systems/physics_sys.h>
 
 #include <r2/utilities/event.h>
 #include <r2/utilities/window.h>
@@ -19,7 +25,8 @@ namespace r2 {
 			state_entities();
 			~state_entities();
 
-			mlist<scene_entity*>* entities;
+			associative_pod_array<entityId, scene_entity*> entities;
+			associative_pod_array<entityId, scene_entity*> updatingEntities;
 			mvector<scene_entity*>* uninitializedEntities;
 	};
 
@@ -41,29 +48,37 @@ namespace r2 {
 			static v8::Isolate* isolate() { return instance->m_scriptMgr->context()->isolate(); }
 
 			// accessors
-			const mvector<mstring>& args() const;
-			memory_man* memory() const;
-			scene_man* scenes() const;
-			state_man* states() const;
-			asset_man* assets() const;
-			file_man* files() const;
-			render_man* renderer() const;
-			script_man* scripts() const;
-			log_man* logs() const;
-			r2::window* window();
+			static const mvector<mstring>& args() { return instance->m_args; }
+			static memory_man* memory() { return memory_man::get(); }
+			static scene_man* scenes() { return instance->m_sceneMgr; }
+			static state_man* states() { return instance->m_stateMgr; }
+			static asset_man* assets() { return instance->m_assetMgr; }
+			static file_man* files() { return instance->m_fileMgr; }
+			static render_man* renderer() { return instance->m_renderMgr; }
+			static script_man* scripts() { return instance->m_scriptMgr; }
+			static input_man* input() { return instance->m_inputMgr; }
+			static audio_man* audio() { return instance->m_audioMgr; }
+			static log_man* logs() { return logMgr; }
 
-			engine_state_data* get_engine_state_data(u16 factoryIdx);
-			scene* current_scene();
+			static r2::window* window() { return &instance->m_window; }
+			static engine_state_data* get_engine_state_data(u16 factoryIdx) { return instance->m_globalStateData[factoryIdx]; }
+			static inline f32 fps() { return instance->m_fps; }
+			static scene* current_scene() {
+				scene* debugScene = instance->m_sceneMgr->get("##debug##");
+				if (debugScene) return debugScene;
 
-			// functions for scripts
+				state* currentState = instance->m_stateMgr->current();
+				if (currentState) return currentState->getScene();
+
+				return nullptr;
+			}
+
+			//
 			bool open_window(i32 w, i32 h, const mstring& title, bool can_resize = false, bool fullscreen = false);
-
-			// inherited functions
 			virtual void handle(event* evt);
-		  
-			// debug
-			void log(const mstring& pre,mstring msg,...);
-
+			void log(const mstring& pre, mstring msg,...);
+			void activate_state(const mstring& name);
+			void destroy_all_entities();
 
 			// loop functions
 			void initialize_new_entities();
@@ -91,10 +106,13 @@ namespace r2 {
 			file_man* m_fileMgr;
 			render_man* m_renderMgr;
 			script_man* m_scriptMgr;
+			input_man* m_inputMgr;
+			audio_man* m_audioMgr;
 
 			// stuff
 			r2::window m_window;
 			mvector<mstring> m_args;
+			f32 m_fps;
 
 			// v8 initialization
 			std::unique_ptr<v8::Platform> m_platform;

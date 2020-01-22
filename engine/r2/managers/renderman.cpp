@@ -7,7 +7,7 @@ namespace r2 {
 	render_driver::~render_driver() {
 	}
 
-	size_t render_driver::get_uniform_attribute_size(uniform_attribute_type type) const {
+	size_t render_driver::get_uniform_attribute_size(uniform_format* fmt, u16 idx, uniform_attribute_type type) const {
 		static size_t attr_sizes[21] = {
 			4 , 4 , 4 , // scalar
 			8 , 8 , 8 , // vec2
@@ -20,8 +20,8 @@ namespace r2 {
 
 		return attr_sizes[type];
 	}
-	void render_driver::serialize_uniform_value(const void* input, void* output, uniform_attribute_type type) const {
-		memcpy(output, input, get_uniform_attribute_size(type));
+	void render_driver::serialize_uniform_value(const void* input, void* output, uniform_format* fmt, u16 idx, uniform_attribute_type type) const {
+		memcpy(output, input, get_uniform_attribute_size(fmt, idx, type));
 	}
 
 	render_man* render_driver::manager() const {

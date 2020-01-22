@@ -11,7 +11,10 @@ namespace r2 {
 			m_data = r2engine::get()->files()->create(DM_BINARY, "event_data");
 			__set_temp_engine_state_ref(nullptr);
 			m_internalOnly = true;
-		} else m_data = nullptr;
+		} else {
+			m_data = nullptr;
+			m_internalOnly = false;
+		}
     }
 
 	event::event(const event& o) {
@@ -69,6 +72,10 @@ namespace r2 {
 		m_jsonData = v;
 	}
 
+	void event::set_json_from_str(const mstring& v) {
+		m_jsonData = v;
+	}
+
 	void event::set_json(v8Args args) {
 		if (args.Length() != 1) args.GetIsolate()->ThrowException(v8::String::NewFromUtf8(args.GetIsolate(), "Incorrect number of arguments provided to event::set_json"));
 		else {
@@ -91,31 +98,61 @@ namespace r2 {
 
     event_receiver::event_receiver(memory_allocator* memory) : m_memory(memory), m_isAtFrameStart(true) {
 		if (!m_memory) m_memory = memory_man::global();
+
+		m_frameStartEvents = nullptr;
+		m_nextFrameStartEvents = nullptr;
+		m_children = nullptr;
+		m_subscribesTo = nullptr;
+		m_parent = nullptr;
     }
 
     event_receiver::~event_receiver() {
+		if (m_frameStartEvents) destroy_event_receiver();
     }
 
+	void event_receiver::initialize_event_receiver() {
+		m_frameStartEvents = new mvector<event*>();
+		m_nextFrameStartEvents = new mvector<event*>();
+		m_children = new mlist<event_receiver*>();
+		m_subscribesTo = new mlist<mstring>();
+	}
+
+	void event_receiver::destroy_event_receiver() {
+		if (m_parent) m_parent->remove_child(this);
+
+		delete m_frameStartEvents;
+		delete m_nextFrameStartEvents;
+		delete m_children;
+		delete m_subscribesTo;
+		m_frameStartEvents = nullptr;
+		m_nextFrameStartEvents = nullptr;
+		m_children = nullptr;
+		m_subscribesTo = nullptr;
+	}
+
     void event_receiver::add_child(event_receiver *child) {
-        m_children.push_front(child);
+        m_children->push_front(child);
+		child->m_parent = this;
     }
 
     void event_receiver::remove_child(event_receiver* child) {
-        for(auto i = m_children.begin();i != m_children.end();i++) {
+        for(auto i = m_children->begin();i != m_children->end();i++) {
             if((*i) == child) {
-                m_children.erase(i);
+                m_children->erase(i);
+				child->m_parent = nullptr;
                 return;
             }
         }
     }
+
 	void event_receiver::subscribe(const mstring& eventName) {
-		m_subscribesTo.push_front(eventName);
+		m_subscribesTo->push_front(eventName);
 	}
 
 	void event_receiver::unsubscribe(const mstring& eventName) {
-		for(auto i = m_subscribesTo.begin();i != m_subscribesTo.end();i++) {
+		for(auto i = m_subscribesTo->begin();i != m_subscribesTo->end();i++) {
 			if((*i) == eventName) {
-				m_subscribesTo.erase(i);
+				m_subscribesTo->erase(i);
 				return;
 			}
 		}
@@ -124,24 +161,27 @@ namespace r2 {
 	void event_receiver::frame_started() {
 		m_isAtFrameStart = true;
 		memory_man::push_current(memory_man::global());
-		for (auto child : m_children) child->frame_started();
-		for (auto e : m_frameStartEvents) {
+		auto children = *m_children;
+		for (auto child : children) child->frame_started();
+
+		auto events = *m_frameStartEvents;
+		for (auto e : events) {
 			dispatch(e);
 			delete e;
 		}
-		m_frameStartEvents.clear();
+		delete m_frameStartEvents;
+		m_frameStartEvents = new mvector<event*>();
 		swap(m_frameStartEvents, m_nextFrameStartEvents);
 		memory_man::pop_current();
 		m_isAtFrameStart = false;
 	}
 
     void event_receiver::dispatch(event* e) {
-        if(e->data()) e->data()->set_position(0);
-
 		bool subscribesTo = true;
-		if (m_subscribesTo.size() > 0) {
+		if (m_subscribesTo->size() > 0) {
 			subscribesTo = false;
-			for(auto ename : m_subscribesTo) {
+			auto subscriptions = *m_subscribesTo;
+			for(auto ename : subscriptions) {
 				if (ename == e->name()) {
 					subscribesTo = true;
 					break;
@@ -152,12 +192,13 @@ namespace r2 {
 		if (subscribesTo) {
 			// ensure derived classes operate in their own memory scopes (or default to global)
 			memory_man::push_current(m_memory);
+			if(e->data()) e->data()->set_position(0);
 			handle(e);
 			memory_man::pop_current();
 		}
 
         if(!e->is_recursive()) return;
-        for(auto i = m_children.begin();i != m_children.end();i++) {
+        for(auto i = m_children->begin();i != m_children->end();i++) {
             (*i)->dispatch(e);
         }
     }
@@ -165,11 +206,13 @@ namespace r2 {
 	void event_receiver::dispatchAtFrameStart(event* e) {
 		memory_man::push_current(memory_man::global());
 		if (m_isAtFrameStart) {
-			m_nextFrameStartEvents.push_back(new event(*e));
+			//m_nextFrameStartEvents->push_back(new event(*e));
+			dispatch(e);
+			memory_man::pop_current();
 			return;
 		}
 
-		m_frameStartEvents.push_back(new event(*e));
+		m_frameStartEvents->push_back(new event(*e));
 		memory_man::pop_current();
 	}
 }

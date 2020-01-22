@@ -94,7 +94,7 @@ namespace r2 {
             bool read_int64(i64& data);
             bool read_float32(f32& data);
             bool read_float64(f64& data);
-			bool read_string(mstring& data, u32 length);
+			bool read_string(mstring& data, u32 length = 0);
 			bool read_line(mstring& data);
 
             /*
@@ -116,6 +116,7 @@ namespace r2 {
 
             void seek(i32 off); /* adds to m_offset */
             void set_position(u32 pos);
+			data_container* sub(size_t length);
             u32 position() const { return m_offset; }
 			bool at_end(u32 end_off = 0) const { return m_offset > m_size - end_off; }
 			bool at_end_v8() const { return m_offset >= m_size; }

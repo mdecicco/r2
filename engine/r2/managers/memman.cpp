@@ -2,6 +2,8 @@
 #include <cstdlib>
 
 namespace r2 {
+	static bool use_malloc = true;
+
 	memory_block* blockFromPtr(void *data) {
 		return (memory_block*)((u8*)data - sizeof(memory_block));
 	}
@@ -35,7 +37,7 @@ namespace r2 {
 	}
 
 	memory_allocator::memory_allocator(size_t max_size) : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(max_size), m_used(0), m_blockCount(0) {
-		m_last = r2engine::get()->memory()->get_deepest_allocator();
+		m_last = r2engine::memory()->get_deepest_allocator();
 		m_last->m_next = this;
 		m_base = memory_man::global()->allocate(max_size);
 		m_baseBlock = (memory_block*)m_base;
@@ -58,9 +60,10 @@ namespace r2 {
 	}
 
 	void* memory_allocator::allocate(size_t size) {
+		if (use_malloc) return malloc(size);
 		if (size > m_size - m_used) {
-			if (m_id == 1) printf("Failed to allocate %s bytes from allocator %d, which only has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
-			else r2Error("Failed to allocate %s bytes from allocator %d, which only has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
+			if (m_id == 1) printf("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
+			else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
 
 			exit(-1);
 			return nullptr;
@@ -74,7 +77,45 @@ namespace r2 {
 		return ptrFromBlock(block);
 	}
 
+	void* memory_allocator::reallocate(void* ptr, size_t size) {
+		if (use_malloc) return realloc(ptr, size);
+		memory_block* block = blockFromPtr(ptr);
+		if (block->size == size) return ptr;
+		if (block->used == m_id) {
+			void* newPtr = reallocate_from_self(ptr, size);
+			if (!newPtr) {
+				if (m_id == 1) printf("Failed to reallocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
+				else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
+
+				exit(-1);
+				return nullptr;
+			}
+
+			return newPtr;
+		}
+
+		// this allocator didn't allocate ptr... nice
+		if (block->used < m_id && m_last) {
+			void* newPtr = m_last->reallocate_called_from_other_allocator(block, ptr, size, m_id);
+			if (newPtr) return newPtr;
+		}
+
+		if (block->used > m_id && m_next) {
+			void* newPtr = m_next->reallocate_called_from_other_allocator(block, ptr, size, m_id);
+			if (newPtr) return newPtr;
+		}
+
+		r2Error("Memory leak detected. 0x%X was allocated by allocator %d, which was destroyed. Also, failed to reallocate data\n", ptr, block->used);
+		exit(-1);
+		return nullptr;
+	}
+
 	bool memory_allocator::deallocate(void* ptr) {
+		if (use_malloc) {
+			free(ptr);
+			return true;
+		}
+
 		memory_block* block = blockFromPtr(ptr);
 		if (block->used == m_id) {
 			deallocate_from_self(ptr);
@@ -86,25 +127,6 @@ namespace r2 {
 		if (block->used > m_id && m_next && m_next->deallocate_called_from_other_allocator(block, ptr, m_id)) return true;
 
 		r2Error("Memory leak detected. 0x%X was allocated by allocator %d, which was destroyed.\n", ptr, block->used);
-		return false;
-	}
-
-	bool memory_allocator::deallocate_called_from_other_allocator(memory_block* block, void* ptr, allocator_id otherAllocatorId) {
-		if (block->used == m_id) {
-			deallocate_from_self(ptr);
-			return true;
-		}
-
-		if ((block->used > m_id && otherAllocatorId > m_id) || (block->used < m_id && otherAllocatorId < m_id)) {
-			// block was allocated by an allocator that was between this one and the one that called this function
-			// but was deleted. The memory used by ptr was released, back to the global allocator, but this is
-			// technically a memory leak
-			return false;
-		}
-
-		if (block->used < m_id && m_last && m_last->deallocate_called_from_other_allocator(block, ptr, m_id)) return true;
-		if (block->used > m_id && m_next && m_next->deallocate_called_from_other_allocator(block, ptr, m_id)) return true;
-
 		return false;
 	}
 
@@ -135,64 +157,6 @@ namespace r2 {
 		}
 	}
 
-	void memory_allocator::deallocate_from_self(void* ptr) {
-		memory_block* block = blockFromPtr(ptr);
-		assert(block->used == m_id);
-
-		block->used = false;
-		m_used -= block->size;
-
-		if (block->next && !block->next->used) {
-			// merge with next
-			block->size += block->next->size + sizeof(memory_block);
-			block->next = block->next->next;
-			checkSize(block);
-			m_used -= sizeof(memory_block);
-			m_blockCount--;
-		}
-
-		// can't merge backwards here because of the lack of memory_block::last,
-		// merge forward from the beginning instead every so often
-
-		m_mergeCounter--;
-		if (m_mergeCounter == 0) merge_adjacent_blocks();
-	}
-
-	memory_block* memory_allocator::find_available(size_t size) {
-		memory_block* b = m_baseBlock;
-		while(b) {
-			if (b->size > size + sizeof(memory_block) && !b->used) {
-				u8* bData = (u8*)ptrFromBlock(b);
-
-				if (checkSize(b)) {
-					memory_block* nb = (memory_block*)(bData + size);
-					nb->next = b->next;
-					nb->size = b->size - size - sizeof(memory_block);
-					nb->used = false;
-
-					b->next = nb;
-					b->size = size;
-					b->used = true;
-
-					checkSize(b);
-					checkSize(nb);
-
-					m_blockCount++;
-					m_used += sizeof(memory_block);
-					return b;
-				}
-			} else if(b->size == size && !b->used) {
-				return b;
-			}
-			b = b->next;
-		}
-
-		if (m_id == 1) printf("Failed to find memory for size %s\n", format_size(size));
-		else r2Error("Failed to find memory for size %s\n", format_size(size));
-
-		return nullptr;
-	}
-
 	void memory_allocator::debug(allocator_id level) {
 		merge_adjacent_blocks();
 
@@ -205,7 +169,7 @@ namespace r2 {
 		size_t other_unused = 0;
 		size_t other_used = 0;
 		memset(buckets, 0, sizeof(bucket) * 32);
-		
+
 		memory_block* b = m_baseBlock;
 		while(b) {
 			bool found = false;
@@ -250,6 +214,207 @@ namespace r2 {
 		return m_id;
 	}
 
+	void memory_allocator::deallocate_from_self(void* ptr) {
+		if (use_malloc) {
+			free(ptr);
+			return;
+		}
+		memory_block* block = blockFromPtr(ptr);
+		assert(block->used == m_id);
+
+		block->used = false;
+		m_used -= block->size;
+
+		if (block->next && !block->next->used) {
+			// merge with next
+			block->size += block->next->size + sizeof(memory_block);
+			block->next = block->next->next;
+			checkSize(block);
+			m_used -= sizeof(memory_block);
+			m_blockCount--;
+		}
+
+		// can't merge backwards here because of the lack of memory_block::last,
+		// merge forward from the beginning instead every so often
+
+		m_mergeCounter--;
+		if (m_mergeCounter == 0) merge_adjacent_blocks();
+	}
+
+	bool memory_allocator::deallocate_called_from_other_allocator(memory_block* block, void* ptr, allocator_id otherAllocatorId) {
+		if (block->used == m_id) {
+			deallocate_from_self(ptr);
+			return true;
+		}
+
+		if ((block->used > m_id && otherAllocatorId > m_id) || (block->used < m_id && otherAllocatorId < m_id)) {
+			// block was allocated by an allocator that was between this one and the one that called this function
+			// but was deleted. The memory used by ptr was released, back to the global allocator, but this is
+			// technically a memory leak
+			return false;
+		}
+
+		if (block->used < m_id && m_last && m_last->deallocate_called_from_other_allocator(block, ptr, m_id)) return true;
+		if (block->used > m_id && m_next && m_next->deallocate_called_from_other_allocator(block, ptr, m_id)) return true;
+
+		return false;
+	}
+
+	void* memory_allocator::reallocate_from_self(void* ptr, size_t size) {
+		if (use_malloc) return realloc(ptr, size);
+		memory_block* block = blockFromPtr(ptr);
+		assert(block->used == m_id);
+
+		// should be what happens
+		if (size > block->size) {
+			size_t sizeDiff = size - block->size;
+
+			// first, see if the next block can be merged into this one to accomodate the new size
+			if (block->next && !block->next->used && block->next->size > sizeDiff) {
+				// yup. increase the size of this block, and construct a new block after it to refer
+				// to the remainder of the next block
+				size_t oldNextSize = block->next->size;
+				memory_block* blockAfterNext = block->next->next;
+
+				block->size = size;
+
+				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
+				nextBlock->next = blockAfterNext;
+				nextBlock->size = oldNextSize - sizeDiff;
+				nextBlock->used = false;
+
+				block->next = nextBlock;
+
+				return ptr;
+			} else {
+				// nope. allocate a new one, copy this one to it, and deallocate this one
+				void* newPtr = allocate(size);
+				memcpy(newPtr, ptr, block->size);
+
+				block->used = false;
+				m_used -= block->size;
+
+				if (block->next && !block->next->used) {
+					// merge with next
+					block->size += block->next->size + sizeof(memory_block);
+					block->next = block->next->next;
+					checkSize(block);
+					m_used -= sizeof(memory_block);
+					m_blockCount--;
+				}
+
+				// can't merge backwards here because of the lack of memory_block::last,
+				// merge forward from the beginning instead every so often
+
+				m_mergeCounter--;
+				if (m_mergeCounter == 0) merge_adjacent_blocks();
+
+				return newPtr;
+			}
+		} else {
+			size_t sizeDiff = block->size - size;
+			
+			// first, see if the next block can be expanded backwards
+			if (block->next && !block->next->used) {
+				size_t oldNextSize = block->next->size;
+				memory_block* blockAfterNext = block->next->next;
+
+				block->size = size;
+
+				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
+				nextBlock->next = blockAfterNext;
+				nextBlock->size = oldNextSize + sizeDiff;
+				nextBlock->used = false;
+
+				block->next = nextBlock;
+
+				return ptr;
+			} else if (sizeDiff > sizeof(memory_block)) {
+				// nope, but a new free block can be created in the gap left by shrinking this block
+
+				memory_block* oldNextBlock = block->next;
+
+				block->size = size;
+
+				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
+				nextBlock->next = oldNextBlock;
+				nextBlock->size = sizeDiff - sizeof(memory_block);
+				nextBlock->used = false;
+
+				block->next = nextBlock;
+
+				m_blockCount++;
+
+				return ptr;
+			} else {
+				// this block can't be shrunk, but that's fine. It can at least hold the data that it needs to
+				return ptr;
+			}
+		}
+
+		return nullptr;
+	}
+
+	void* memory_allocator::reallocate_called_from_other_allocator(memory_block* block, void* ptr, size_t size, allocator_id otherAllocatorId) {
+		if (block->used == m_id) {
+			return reallocate_from_self(ptr, size);
+		}
+
+		if ((block->used > m_id && otherAllocatorId > m_id) || (block->used < m_id && otherAllocatorId < m_id)) {
+			// block was allocated by an allocator that was between this one and the one that called this function
+			// but was deleted. The memory used by ptr was released, back to the global allocator, but this is
+			// technically a memory leak
+			return nullptr;
+		}
+
+		if (block->used < m_id && m_last) {
+			void* newPtr = m_last->reallocate_called_from_other_allocator(block, ptr, size, m_id);
+			if (newPtr) return newPtr;
+		}
+
+		if (block->used > m_id && m_next) {
+			void* newPtr = m_next->reallocate_called_from_other_allocator(block, ptr, size, m_id);
+			if (newPtr) return newPtr;
+		}
+
+		return nullptr;
+	}
+
+	memory_block* memory_allocator::find_available(size_t size) {
+		memory_block* b = m_baseBlock;
+		while(b) {
+			if (b->size > size + sizeof(memory_block) && !b->used) {
+				u8* bData = (u8*)ptrFromBlock(b);
+
+				if (checkSize(b)) {
+					memory_block* nb = (memory_block*)(bData + size);
+					nb->next = b->next;
+					nb->size = b->size - size - sizeof(memory_block);
+					nb->used = false;
+
+					b->next = nb;
+					b->size = size;
+					b->used = true;
+
+					checkSize(b);
+					checkSize(nb);
+
+					m_blockCount++;
+					m_used += sizeof(memory_block);
+					return b;
+				}
+			} else if(b->size == size && !b->used) {
+				return b;
+			}
+			b = b->next;
+		}
+
+		if (m_id == 1) printf("Failed to find memory for size %s\n", format_size(size));
+		else r2Error("Failed to find memory for size %s\n", format_size(size));
+
+		return nullptr;
+	}
+
 
 	memory_man* memory_man::get() {
 		if (!memory_man::instance) {
@@ -260,7 +425,7 @@ namespace r2 {
 	}
 
 	memory_man::memory_man() {
-		FILE* fp = fopen("mem.ini", "r");
+		FILE* fp = fopen("mem.ini", "rb");
 		if (!fp) {
 			printf("No mem.ini found. Creating one, maximum memory usage by this application is now 32 MB. Take that.\n");
 			fp = fopen("mem.ini", "w");
@@ -373,6 +538,10 @@ namespace r2 {
 		return memory_man::get()->m_allocatorStack->allocator->allocate(size);
 	}
 
+	void* memory_man::reallocate(void* ptr, size_t size) {
+		return memory_man::get()->m_allocatorStack->allocator->reallocate(ptr, size);
+	}
+
 	void memory_man::deallocate(void* ptr) {
 		// will traverse the allocator list in both directions until the allocator that allocated this data is found
 		// starts at current allocator, since that's probably the most common case
@@ -403,6 +572,13 @@ namespace r2 {
 		//printf("r2alloc(%d:%d): 0x%X\n", sz, align(sz), (u64)ret);
 		//return ret;
 		return memory_man::allocate(align(sz));
+	}
+
+	void* r2realloc(void* ptr, size_t sz) {
+		//void* ret = memory_man::get()->allocate(align(sz));
+		//printf("r2alloc(%d:%d): 0x%X\n", sz, align(sz), (u64)ret);
+		//return ret;
+		return memory_man::reallocate(ptr, align(sz));
 	}
 
 	void r2free(void* ptr) {

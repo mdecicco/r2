@@ -117,9 +117,18 @@ namespace r2 {
 	}
 
 	trace::trace(Isolate* isolate) {
-		auto trace = StackTrace::CurrentStackTrace(isolate, 1)->GetFrame(isolate, 0);
-		file = *String::Utf8Value(isolate, trace->GetScriptName());
-		function = *String::Utf8Value(isolate, trace->GetFunctionName());
-		line = trace->GetLineNumber();
+		file = "Invalid trace";
+		function = "...";
+		line = 0;
+		if (!isolate->IsInUse()) return;
+		auto trace = StackTrace::CurrentStackTrace(isolate, 1);
+		if (!trace.IsEmpty()) {
+			auto frame = trace->GetFrame(isolate, 0);
+			if (!frame.IsEmpty()) {
+				file = *String::Utf8Value(isolate, frame->GetScriptName());
+				function = *String::Utf8Value(isolate, frame->GetFunctionName());
+				line = frame->GetLineNumber();
+			}
+		}
 	}
 };

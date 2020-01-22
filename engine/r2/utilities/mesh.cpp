@@ -76,54 +76,69 @@ namespace r2 {
 		m_instance_count = count;
 	}
 
-	void mesh_construction_data::append_vertex_data(void* vdata) {
+	bool mesh_construction_data::append_vertex_data(void* vdata) {
 		if (!m_vertexFormat) {
 			r2Error("Mesh does not have an vertex format set, you can't append a vertex to it");
-			return;
+			return false;
 		}
 
 		if (m_last_vertex_idx == m_vertex_count) {
 			r2Error("Cannot append vertex data to mesh, the mesh's maximum vertex count (%d) has been reached. Resize with mesh.set_max_vertex_count()", m_vertex_count);
-			return;
+			return false;
 		}
 
 		assign_memory(m_vertices, vdata, m_last_vertex_idx++, m_vertexFormat->size());
+		return true;
 	}
 
-	void mesh_construction_data::append_index_data(void* idata) {
+	bool mesh_construction_data::append_index_data(void* idata) {
 		if (m_last_index_idx == m_index_count) {
 			r2Error("Cannot append index data to mesh, the mesh's maximum index count (%d) has been reached. Resize with mesh.set_max_index_count()", m_index_count);
-			return;
+			return false;
 		}
 
 		assign_memory(m_indices, idata, m_last_index_idx++, m_indexType);
+		return true;
 	}
 
-	void mesh_construction_data::append_instance_data(void* idata) {
+	bool mesh_construction_data::append_instance_data(void* idata) {
 		if (!m_instanceFormat) {
 			r2Error("Mesh does not have an instance format set, you can't append an instance to it");
-			return;
+			return false;
 		}
 
 		if (m_last_instance_idx == m_instance_count) {
 			r2Error("Cannot append instance data to mesh, the mesh's maximum instance count (%d) has been reached. Resize with mesh.set_max_instance_count()", m_instance_count);
-			return;
+			return false;
 		}
 
 		assign_memory(m_instances, idata, m_last_instance_idx++, m_instanceFormat->size());
+		return true;
 	}
 
-	void mesh_construction_data::update_instance(u32 idx, void* idata) {
+	void mesh_construction_data::fill() {
+		m_last_vertex_idx = m_vertex_count;
+		if (m_vertices) memset(m_vertices, 0, m_vertexFormat->size() * size_t(m_vertex_count));
+		
+		m_last_index_idx = m_index_count;
+		if (m_indices) memset(m_indices, 0, size_t(m_indexType) * size_t(m_index_count));
+
+		m_last_instance_idx = m_instance_count;
+		if (m_instances) memset(m_instances, 0, m_instanceFormat->size() * size_t(m_instance_count));
+	}
+
+	bool mesh_construction_data::update_instance(u32 idx, void* idata) {
 		if (!m_instanceFormat) {
 			r2Error("Mesh does not have an instance format set, you can't update an instance on it");
-			return;
+			return false;
 		}
 
 		if (idx > m_last_instance_idx) {
 			r2Error("Instance index %d is out of bounds (mesh has %d instances)", idx, m_last_index_idx);
-			return;
+			return false;
 		}
 
 		assign_memory(m_instances, idata, idx, m_instanceFormat->size());
+		return true;
 	}
 };

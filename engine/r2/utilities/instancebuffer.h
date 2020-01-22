@@ -35,17 +35,20 @@ namespace r2 {
             instance_format(const instance_format& o);
             ~instance_format();
 
-            void add_attr(instance_attribute_type type);
+            void add_attr(instance_attribute_type type, bool isModelMatrix = false);
             bool operator==(const instance_format& rhs) const;
 			const mvector<instance_attribute_type>& attributes() const;
 
-            size_t size() const;
+            inline size_t size() const { return m_instanceSize; }
+			inline size_t modelMatrixOffset() const { return m_modelMatrixOffset; }
+			inline bool hasModelMatrix() const { return m_modelMatrixOffset != SIZE_MAX; }
 			size_t offsetOf(u16 attrIdx) const;
             mstring to_string() const;
 			mstring hash_name() const;
 
         protected:
             mvector<instance_attribute_type> m_attrs;
+			size_t m_modelMatrixOffset;
             size_t m_instanceSize;
             mstring m_fmtString;
 			mstring m_hashName;
@@ -54,6 +57,17 @@ namespace r2 {
     class instance_buffer;
     struct ins_bo_segment : public gpu_buffer_segment {
 		ins_bo_segment() : gpu_buffer_segment(), buffer(nullptr) { }
+
+		ins_bo_segment sub(size_t _begin, size_t _end, size_t _memBegin, size_t _memEnd) {
+			ins_bo_segment seg;
+			seg.begin = begin + _begin;
+			seg.end = begin + _end;
+			seg.memBegin = memBegin + _memBegin;
+			seg.memEnd = memBegin + _memEnd;
+			seg.buffer = buffer;
+			return seg;
+		}
+
         instance_buffer* buffer;
     };
 
@@ -66,6 +80,7 @@ namespace r2 {
 			virtual void* data() const;
 
             ins_bo_segment append(const void* data, size_t count);
+			void update(const ins_bo_segment& segment, const void* data);
 
         protected:
             instance_format* m_format;

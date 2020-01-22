@@ -7,7 +7,7 @@ class TestEntity extends engine.Entity {
 	
 	wasInitialized = () => {
 		engine.log(`TestEntity(${this.id}) wasInitialized`);
-		this.set_update_frequency(200);
+		this.set_update_frequency(2);
 		this.subscribe("test_event");
 	}
 	

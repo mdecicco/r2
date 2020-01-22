@@ -16,7 +16,6 @@ class test_system : public entity_system {
 		~test_system() { }
 
 		virtual const size_t component_size() const { return sizeof(test_component); }
-		virtual const size_t max_component_count() const { return 3; }
 
 		virtual void initialize_entity(scene_entity* entity) {
 			entity->bind("test_callback");
@@ -45,9 +44,11 @@ class test_system : public entity_system {
 
 		virtual void bind(scene_entity_component* component, scene_entity* entity) {
 			using c = test_component;
+
 			entity->bind(component, "x", &c::x);
 			entity->bind(component, "y", &c::y);
 			entity->bind(component, "z", &c::z);
+
 			entity->bind(this, "test_component_id", [](entity_system* system, scene_entity* entity, v8Args args) {
 				system->state().enable();
 				auto component = system->state()->entity(entity->id());

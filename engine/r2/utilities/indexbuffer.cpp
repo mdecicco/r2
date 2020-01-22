@@ -26,7 +26,7 @@ namespace r2 {
 		return m_data;
 	}
     idx_bo_segment index_buffer::append(const void *data, size_t count) {
-        if(count >= m_maxCount - m_indexCount) {
+        if(count > m_maxCount - m_indexCount) {
             r2Error("Insufficient space in index buffer of type [%s] for %d indices (%d max) (buf: %d)", index_names[m_type], count, m_maxCount, m_id);
             idx_bo_segment seg;
             seg.buffer = nullptr;
@@ -49,4 +49,28 @@ namespace r2 {
 
         return seg;
     }
+
+	void index_buffer::update(const idx_bo_segment& seg, const void* data) {
+		if (!seg.is_valid()) {
+			r2Error("Attempted to update invalid segment of index buffer. Ignoring");
+			return;
+		}
+		if (seg.buffer != this) {
+			r2Error("Segment for another uniform buffer passed to index_buffer::update");
+			return;
+		}
+
+		if (seg.memBegin > m_type * m_indexCount) {
+			r2Error("Out of range segment.memBegin (%llu) provided to index_buffer::update", seg.memBegin);
+			return;
+		}
+
+		if (seg.memEnd > m_type * m_indexCount) {
+			r2Error("Out of range segment.memEnd (%llu) provided to index_buffer::update", seg.memEnd);
+			return;
+		}
+
+		memcpy((u8*)m_data + seg.memBegin, data, seg.memsize());
+		updated(seg.memBegin, seg.memEnd);
+	}
 }
