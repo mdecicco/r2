@@ -52,6 +52,7 @@ namespace r2 {
 		r2engine::entity_created(this);
 
 		m_scripted = true;
+		m_doesUpdate = false;
 	}
 
 	scene_entity::scene_entity(const mstring& name)
@@ -64,6 +65,7 @@ namespace r2 {
 		r2engine::entity_created(this);
 		
 		m_scripted = false;
+		m_doesUpdate = false;
 	}
 
 	scene_entity::~scene_entity() {
@@ -104,7 +106,10 @@ namespace r2 {
 		if (!maybeFunc->IsUndefined() && !maybeFunc->IsFunction()) {
 			r2Warn("Entity \"%s\" has a \"%s\" property, but it is not a function", m_name->c_str(), function.c_str());
 			return false;
-		} else if (!maybeFunc->IsUndefined()) (*m_scriptFuncs)[function].Reset(isolate, LocalFunctionHandle::Cast(maybeFunc));
+		} else if (!maybeFunc->IsUndefined()) {
+			if (function == "update") m_doesUpdate = true;
+			(*m_scriptFuncs)[function].Reset(isolate, LocalFunctionHandle::Cast(maybeFunc));
+		}
 	}
 
 	bool scene_entity::bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args)) {
@@ -147,6 +152,7 @@ namespace r2 {
 		if (func != m_scriptFuncs->end()) {
 			func->second.Reset();
 			m_scriptFuncs->erase(functionOrProp);
+			if (functionOrProp == "update") m_doesUpdate = false;
 			return;
 		}
 
@@ -212,6 +218,11 @@ namespace r2 {
 		}
 	}
 
+	void scene_entity::set_name(const mstring& name) {
+		delete m_name;
+		m_name = new mstring(name);
+	}
+
 	void scene_entity::destroy() {
 		if (m_destroyed) {
 			r2Error("Entity \"%s\" was already destroyed", m_name->c_str());
@@ -246,6 +257,24 @@ namespace r2 {
 		bind("update");
 		bind("willBeDestroyed");
 		if(bind("wasInitialized")) call("wasInitialized");
+	}
+
+	void scene_entity::updatesStarted() {
+		if (m_doesUpdate) return;
+		m_doesUpdate = true;
+
+		event e = evt(EVT_NAME_ENABLE_ENTITY_UPDATES, true, false);
+		e.data()->write(this);
+		r2engine::get()->dispatchAtFrameStart(&e);
+	}
+
+	void scene_entity::updatesStopped() {
+		if (!m_doesUpdate) return;
+		m_doesUpdate = false;
+
+		event e = evt(EVT_NAME_DISABLE_ENTITY_UPDATES, true, false);
+		e.data()->write(this);
+		r2engine::get()->dispatchAtFrameStart(&e);
 	}
 
 	void scene_entity::handle(event* evt) {
@@ -319,6 +348,15 @@ namespace r2 {
 		r2engine::get()->add_child(entity);
 	}
 
+	mvector<scene_entity*> scene_entity::children() {
+		mvector<scene_entity*> result;
+		mlist<scene_entity*>& l = *m_children;
+		for (scene_entity* e : l) {
+			result.push_back(e);
+		}
+		return result;
+	}
+
 
 
 	componentId scene_entity_component::nextComponentId = 1;
@@ -371,8 +409,10 @@ namespace r2 {
 			return;
 		}
 
+		scene_entity_component* comp = (scene_entity_component*)m_components->get(ecomp->second);
 		m_components->remove(ecomp->second);
 		m_entityComponentIds->erase(ecomp);
+		comp->destroy();
 	}
 
 
@@ -457,7 +497,8 @@ namespace r2 {
 
 	void entity_system::initialize_entities() {
 		m_state.enable();
-		for (scene_entity* entity : *m_state->m_uninitializedEntities) {
+		auto& entities = *m_state->m_uninitializedEntities;
+		for (scene_entity* entity : entities) {
 			initialize_entity(entity);
 		}
 		m_state->m_uninitializedEntities->clear();

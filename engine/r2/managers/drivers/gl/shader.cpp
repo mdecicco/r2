@@ -103,8 +103,8 @@ namespace r2 {
 		return m_uniformBlocks[name];
 	}
 
-	u32 gl_shader_program::get_uniform_location(const mstring& name) {
-		u32 loc = 0;
+	i32 gl_shader_program::get_uniform_location(const mstring& name) {
+		i32 loc = 0;
 		glCall(loc = glGetUniformLocation(m_program, name.c_str()));
 		return loc;
 	}
@@ -159,4 +159,12 @@ namespace r2 {
 	void gl_shader_program::uniform_matrix_4x2f(u32 loc, u32 count, f32* values) { glCall(glUniformMatrix4x2fv(loc, count, GL_FALSE, values)); }
 	void gl_shader_program::uniform_matrix_4x3d(u32 loc, u32 count, f64* values) { glCall(glUniformMatrix4x3dv(loc, count, GL_FALSE, values)); }
 	void gl_shader_program::uniform_matrix_4x3f(u32 loc, u32 count, f32* values) { glCall(glUniformMatrix4x3fv(loc, count, GL_FALSE, values)); }
+	void gl_shader_program::texture2D(u32 loc, u32 index, texture_buffer* texture) {
+		gl_render_driver* driver = (gl_render_driver*)r2engine::renderer()->driver();
+		GLuint texId = driver->get_texture_id(texture);
+		if (texId == 0) return;
+		glCall(glActiveTexture(GL_TEXTURE0 + index));
+		glCall(glBindTexture(GL_TEXTURE_2D, texId));
+		uniform1i(loc, index);
+	}
 };

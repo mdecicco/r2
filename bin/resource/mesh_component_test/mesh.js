@@ -47,13 +47,11 @@ class Mesh extends engine.Entity {
 		return Transform3D.rotationTranslationScale(quat.fromEuler(0, 1, 0), this.position, scale);
 	}
 	
-	/*
 	update = (frameDt, updateDt) => {
 		this.time += updateDt;
 		
 		this.instance = { transform: this.getTransform() };
 	}
-	*/
 };
 
 export {

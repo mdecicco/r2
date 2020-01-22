@@ -11,7 +11,6 @@ namespace r2 {
         36, 36, 36,
 		64, 64, 64
     };
-
 	static mstring instance_attr_names[21] = {
 		"int"  , "float", "uint" ,
 		"vec2i", "vec2f", "vec2ui",
@@ -30,25 +29,42 @@ namespace r2 {
 		"m3i", "m3f", "m3u",
 		"m4i", "m4f", "m4u",
 	};
+
     instance_format::instance_format() {
         m_instanceSize = 0;
+		m_modelMatrixOffset = SIZE_MAX;
     }
+
     instance_format::instance_format(const instance_format& o) {
         m_attrs = o.m_attrs;
         m_instanceSize = o.m_instanceSize;
         m_fmtString = o.m_fmtString;
 		m_hashName = o.m_hashName;
     }
+
     instance_format::~instance_format() {
     }
-    void instance_format::add_attr(instance_attribute_type type) {
+
+    void instance_format::add_attr(instance_attribute_type type, bool isModelMatrix) {
         m_attrs.push_back(type);
+		if (isModelMatrix && type != iat_mat4f) {
+			r2Error("Only mat4f instance attributes can be model matrices. Ignoring");
+			isModelMatrix = false;
+		}
+
+		if (isModelMatrix && m_modelMatrixOffset != SIZE_MAX) {
+			r2Warn("Attempting to set model matrix attribute flag for an instance format that already has a model matrix attribute. Ignoring");
+			isModelMatrix = false;
+		}
+
+		if (isModelMatrix) m_modelMatrixOffset = m_instanceSize;
 
         m_instanceSize += instance_attr_sizes[type];
         if(m_fmtString.length() > 0) m_fmtString += ", ";
         m_fmtString += instance_attr_names[type];
 		m_hashName += instance_attr_hash_names[type];
     }
+
     bool instance_format::operator==(const instance_format &rhs) const {
         if(rhs.m_attrs.size() != m_attrs.size()) return false;
         for(int i = 0;i < m_attrs.size();i++) {
@@ -57,12 +73,11 @@ namespace r2 {
 
         return true;
     }
+
 	const mvector<instance_attribute_type>& instance_format::attributes() const {
 		return m_attrs;
 	}
-    size_t instance_format::size() const {
-        return m_instanceSize;
-    }
+
 	size_t instance_format::offsetOf(u16 attrIdx) const {
 		if (attrIdx > m_attrs.size()) {
 			r2Error("instance_format::offsetOf: Attribute index %d out of range (format only has %d attributes).", attrIdx, m_attrs.size());
@@ -74,12 +89,16 @@ namespace r2 {
 
 		return offset;
 	}
+
     mstring instance_format::to_string() const {
         return m_fmtString;
     }
+
 	mstring instance_format::hash_name() const {
 		return m_hashName;
 	}
+
+
 
     instance_buffer::instance_buffer(instance_format* fmt, size_t max_count) : gpu_buffer(max_count * fmt->size()) {
         m_format = fmt;
@@ -88,19 +107,23 @@ namespace r2 {
         r2Log("Allocating %s for a maximum of %d instances of format [%s] (buf: %d)", format_size(m_format->size() * max_count), max_count, m_format->to_string().c_str(), m_id);
         m_data = new unsigned char[fmt->size() * max_count];
     }
+
     instance_buffer::~instance_buffer() {
         r2Log("Deallocating instance buffer: (%s / %s | %d / %d instances used) (buf: %d)", format_size(used_size()), format_size(max_size()), m_instanceCount, m_maxCount, m_id);
         if(m_data) delete [] m_data;
         m_data = 0;
     }
+
 	instance_format* instance_buffer::format() const {
         return m_format;
     }
+
 	void* instance_buffer::data() const {
 		return m_data;
 	}
+
     ins_bo_segment instance_buffer::append(const void *data, size_t count) {
-        if(count >= m_maxCount - m_instanceCount) {
+        if(count > m_maxCount - m_instanceCount) {
             r2Error("Insufficient space in instance buffer of format [%s] for %d instances (%d max) (buf: %d)", m_format->to_string().c_str(), count, m_maxCount, m_id);
             ins_bo_segment seg;
             seg.buffer = nullptr;
@@ -122,6 +145,7 @@ namespace r2 {
 
         return seg;
     }
+
 	void instance_buffer::update(const ins_bo_segment& segment, const void* data) {
 		if (segment.buffer != this) {
 			r2Error("Segment for another instance buffer passed to instance_buffer::update");

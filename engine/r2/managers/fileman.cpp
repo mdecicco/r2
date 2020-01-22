@@ -367,8 +367,19 @@ namespace r2 {
     }
 
 	bool data_container::read_string(mstring& data, u32 length) {
-		data.resize(length);
-		return read_data(&data[0], length);
+		if (length != 0) {
+			data.resize(length);
+			return read_data(&data[0], length);
+		} else {
+			char c = 0;
+			if (!read_data(&c, 1)) return false;
+			while (c != 0) {
+				data += c;
+				if (!read_data(&c, 1)) return false;
+			}
+			return true;
+		}
+		return false;
 	}
 
 	bool data_container::read_line(mstring& data) {
@@ -487,12 +498,12 @@ namespace r2 {
         }
 
         if(m_handle) {
-            i32 r = fseek(m_handle,Offset,SEEK_CUR);
+            i32 r = fseek(m_handle, Offset, SEEK_CUR);
             if(r != 0) {
                 r2Error("Call to seek(%d) with data container (%s) failed: Call to fseek returned (%d)", Offset, m_name.c_str(),r);
             }
             else m_offset += Offset;
-        }
+        } else m_offset += Offset;
     }
 
     void data_container::set_position(u32 Offset) {
@@ -510,6 +521,30 @@ namespace r2 {
         }
         else m_offset = Offset;
     }
+
+	data_container* data_container::sub(size_t length) {
+		if (m_offset + length > m_size) {
+			r2Error("Can't open container of length %llu from '%s', there are only %llu bytes left in this container relative to its current offset", length, m_name.c_str(), m_size - m_offset);
+			return nullptr;
+		}
+
+		data_container* result = r2engine::files()->create(m_mode, m_name + "_sub");
+		if (!result) return nullptr;
+		if (m_handle) {
+			u8* data = new u8[length];
+			if (!read_data(data, length)) {
+				delete[] data;
+				r2engine::files()->destroy(result);
+				return nullptr;
+			}
+			result->write_data(data, length);
+		} else {
+			result->write_data(data(), length);
+			m_offset += length;
+		}
+		result->set_position(0);
+		return result;
+	}
 
 	void data_container::clear() {
 		if (m_data.size() > 0) m_data.clear();

@@ -9,6 +9,7 @@ namespace r2 {
 			~mesh_component();
 
 			void set_node(render_node* node);
+			void release_node();
 			render_node* get_node();
 
 			void set_instance_data(v8Args args);
@@ -31,6 +32,8 @@ namespace r2 {
 
 				m_instance.update_instance(i);
 			}
+
+			void set_instance_transform(const mat4f& transform);
 
 			template <typename instance_type>
 			instance_type* get_instance_data() {

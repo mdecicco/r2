@@ -99,7 +99,7 @@ namespace r2 {
 		return m_data;
 	}
     vtx_bo_segment vertex_buffer::append(const void *data, size_t count) {
-        if(count >= m_maxCount - m_vertexCount) {
+        if(count > m_maxCount - m_vertexCount) {
             r2Error("Insufficient space in vertex buffer of format [%s] for %d vertices (%d max) (buf: %d)", m_format->to_string().c_str(), count, m_maxCount, m_id);
             vtx_bo_segment seg;
             seg.buffer = nullptr;

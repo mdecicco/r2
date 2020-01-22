@@ -43,9 +43,54 @@ MACRO(SOURCE_GROUP_BY_FOLDER target)
 ENDMACRO(SOURCE_GROUP_BY_FOLDER)
 SOURCE_GROUP_BY_FOLDER(r2)
 
-target_include_directories(r2 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}\\include")
-target_link_directories(r2 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/lib)
-target_link_libraries(r2 debug debug/v8pp debug/v8 debug/v8_libbase debug/v8_libplatform debug/glfw3 opengl32)
-target_link_libraries(r2 optimized release/v8pp release/v8 release/v8_libbase release/v8_libplatform release/glfw3 opengl32)
+target_include_directories(r2 PUBLIC
+	${CMAKE_CURRENT_SOURCE_DIR}
+	"${CMAKE_CURRENT_SOURCE_DIR}\\include"
+	"${CMAKE_CURRENT_SOURCE_DIR}\\include\\OIS"
+	"C:\\Program Files (x86)\\OpenAL 1.1 SDK\\include"
+)
+
+target_link_directories(r2 PUBLIC
+	${CMAKE_CURRENT_SOURCE_DIR}/lib
+	"C:\\Program Files (x86)\\OpenAL 1.1 SDK\\libs\\Win64"
+)
+
+SET(debug_libs
+	debug/v8pp
+	debug/v8
+	debug/v8_libbase
+	debug/v8_libplatform
+	debug/glfw3
+	debug/OIS_d
+	debug/Bullet3Collision_Debug
+	debug/Bullet3Common_Debug
+	debug/Bullet3Dynamics_Debug
+	debug/Bullet3Geometry_Debug
+	debug/BulletCollision_Debug
+	debug/BulletDynamics_Debug
+	debug/LinearMath_Debug
+	OpenAL32
+	opengl32
+)
+SET(release_libs
+	release/v8pp
+	release/v8
+	release/v8_libbase
+	release/v8_libplatform
+	release/glfw3
+	release/OIS
+	release/Bullet3Collision
+	release/Bullet3Common
+	release/Bullet3Dynamics
+	release/Bullet3Geometry
+	release/BulletCollision
+	release/BulletDynamics
+	release/LinearMath
+	OpenAL32
+	opengl32
+)
+
+target_link_libraries(r2 ${debug_libs})
+#target_link_libraries(r2 ${release_libs})
 
 add_definitions(-D_CRT_NO_VA_START_VALIDATION)

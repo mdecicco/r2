@@ -35,17 +35,20 @@ namespace r2 {
             instance_format(const instance_format& o);
             ~instance_format();
 
-            void add_attr(instance_attribute_type type);
+            void add_attr(instance_attribute_type type, bool isModelMatrix = false);
             bool operator==(const instance_format& rhs) const;
 			const mvector<instance_attribute_type>& attributes() const;
 
-            size_t size() const;
+            inline size_t size() const { return m_instanceSize; }
+			inline size_t modelMatrixOffset() const { return m_modelMatrixOffset; }
+			inline bool hasModelMatrix() const { return m_modelMatrixOffset != SIZE_MAX; }
 			size_t offsetOf(u16 attrIdx) const;
             mstring to_string() const;
 			mstring hash_name() const;
 
         protected:
             mvector<instance_attribute_type> m_attrs;
+			size_t m_modelMatrixOffset;
             size_t m_instanceSize;
             mstring m_fmtString;
 			mstring m_hashName;

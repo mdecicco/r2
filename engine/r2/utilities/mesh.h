@@ -24,44 +24,46 @@ namespace r2 {
 			u32 instance_count() const { return m_last_instance_idx; }
 
             vertex_format* vertexFormat() const { return m_vertexFormat; }
-            void append_vertex_data(void* vdata);
+			bool append_vertex_data(void* vdata);
             const void* vertex_data() const { return m_vertices; }
 
             index_type indexType() const { return m_indexType; }
-            void append_index_data(void* idata);
+			bool append_index_data(void* idata);
             const void* index_data() const { return m_indices; }
 
             instance_format* instanceFormat() const { return m_instanceFormat; }
-            void append_instance_data(void* idata);
-			void update_instance(u32 idx, void* idata);
+			bool append_instance_data(void* idata);
+			bool update_instance(u32 idx, void* idata);
             const void* instance_data() const { return m_instances; }
 
 			template<typename T>
-			void append_vertex(const T& v) {
+			bool append_vertex(const T& v) {
 				if (sizeof(T) != m_vertexFormat->size()) {
 					r2Error("Attempting to append vertex (%d bytes) to mesh which has a different vertex size (%d bytes) than the one being appended", sizeof(T), m_vertexFormat->size());
-					return;
+					return false;
 				}
-				append_vertex_data((void*)&v);
+				return append_vertex_data((void*)&v);
 			}
 
 			template<typename T>
-			void append_index(const T& i) {
+			bool append_index(const T& i) {
 				if (sizeof(T) != m_indexType) {
 					r2Error("Attempting to append index (%d bytes) to mesh which has a different index size (%d bytes) than the one being appended", sizeof(T), m_indexType);
-					return;
+					return false;
 				}
-				append_index_data((void*)&i);
+				return append_index_data((void*)&i);
 			}
 
 			template<typename T>
-			void append_instance(const T& i) {
+			bool append_instance(const T& i) {
 				if (sizeof(T) != m_instanceFormat->size()) {
 					r2Error("Attempting to append instance (%d bytes) to mesh which has a different instance size (%d bytes) than the one being appended", sizeof(T), m_instanceFormat->size());
-					return;
+					return false;
 				}
-				append_instance_data((void*)&i);
+				return append_instance_data((void*)&i);
 			}
+
+			void fill();
 
 			// js functions
 			void append_vertices_v8(v8Args args);

@@ -22,11 +22,13 @@ namespace r2 {
 		m_updateTmr.start();
 		m_dt.reset();
 		m_dt.start();
+		updatesStarted();
 	}
 
 	void periodic_update::stop_periodic_updates() {
 		m_updateTmr.reset();
 		m_dt.reset();
+		updatesStopped();
 	}
 
 	void periodic_update::setUpdateFrequency(f32 freq) {
