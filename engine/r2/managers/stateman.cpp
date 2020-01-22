@@ -209,8 +209,8 @@ namespace r2 {
 		}
 
 		if (m_engineData) {
-			auto engineData = *m_engineData;
-			for(auto data : engineData) {
+			auto& engineData = *m_engineData;
+			for(auto& data : engineData) {
 				delete data;
 			}
 			delete m_engineData;

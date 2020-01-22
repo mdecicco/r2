@@ -2,6 +2,8 @@
 #include <cstdlib>
 
 namespace r2 {
+	static bool use_malloc = true;
+
 	memory_block* blockFromPtr(void *data) {
 		return (memory_block*)((u8*)data - sizeof(memory_block));
 	}
@@ -35,7 +37,7 @@ namespace r2 {
 	}
 
 	memory_allocator::memory_allocator(size_t max_size) : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(max_size), m_used(0), m_blockCount(0) {
-		m_last = r2engine::get()->memory()->get_deepest_allocator();
+		m_last = r2engine::memory()->get_deepest_allocator();
 		m_last->m_next = this;
 		m_base = memory_man::global()->allocate(max_size);
 		m_baseBlock = (memory_block*)m_base;
@@ -58,7 +60,7 @@ namespace r2 {
 	}
 
 	void* memory_allocator::allocate(size_t size) {
-		return malloc(size);
+		if (use_malloc) return malloc(size);
 		if (size > m_size - m_used) {
 			if (m_id == 1) printf("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
 			else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
@@ -76,7 +78,7 @@ namespace r2 {
 	}
 
 	void* memory_allocator::reallocate(void* ptr, size_t size) {
-		return realloc(ptr, size);
+		if (use_malloc) return realloc(ptr, size);
 		memory_block* block = blockFromPtr(ptr);
 		if (block->size == size) return ptr;
 		if (block->used == m_id) {
@@ -109,8 +111,11 @@ namespace r2 {
 	}
 
 	bool memory_allocator::deallocate(void* ptr) {
-		free(ptr);
-		return true;
+		if (use_malloc) {
+			free(ptr);
+			return true;
+		}
+
 		memory_block* block = blockFromPtr(ptr);
 		if (block->used == m_id) {
 			deallocate_from_self(ptr);
@@ -210,8 +215,10 @@ namespace r2 {
 	}
 
 	void memory_allocator::deallocate_from_self(void* ptr) {
-		free(ptr);
-		return;
+		if (use_malloc) {
+			free(ptr);
+			return;
+		}
 		memory_block* block = blockFromPtr(ptr);
 		assert(block->used == m_id);
 
@@ -254,7 +261,7 @@ namespace r2 {
 	}
 
 	void* memory_allocator::reallocate_from_self(void* ptr, size_t size) {
-		return realloc(ptr, size);
+		if (use_malloc) return realloc(ptr, size);
 		memory_block* block = blockFromPtr(ptr);
 		assert(block->used == m_id);
 
@@ -418,7 +425,7 @@ namespace r2 {
 	}
 
 	memory_man::memory_man() {
-		FILE* fp = fopen("mem.ini", "r");
+		FILE* fp = fopen("mem.ini", "rb");
 		if (!fp) {
 			printf("No mem.ini found. Creating one, maximum memory usage by this application is now 32 MB. Take that.\n");
 			fp = fopen("mem.ini", "w");

@@ -39,7 +39,7 @@ class MeshTestState extends engine.State {
 		
 		const transform = Transform3D.scale(new vec3f(1.25, 1.25, 1.25));
 		
-		const entity_count = 80;
+		const entity_count = 20;
 		
 		const transforms = [];
 		for(var i = 0;i < entity_count;i++) transforms.push({ transform });
@@ -63,6 +63,11 @@ class MeshTestState extends engine.State {
 		ImGui.Text(`FPS: ${engine.frame_rate().toFixed(2)}`);
 		if (ImGui.Button('Reset State', { w: 190, h: 20 })) {
 			engine.activate_state("MeshTestState");
+		}
+	}
+	handleEvent = (evt) => {
+		if (evt.name !== 'log') {
+			engine.log(evt.data);
 		}
 	}
 	willBecomeInactive = () => { }

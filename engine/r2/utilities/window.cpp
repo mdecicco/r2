@@ -79,6 +79,12 @@ namespace r2 {
 		return out;
 	}
 
+	vec2i window::get_cursor() const {
+		double x, y;
+		glfwGetCursorPos(m_window, &x, &y);
+		return vec2i(x, y);
+	}
+
 	void window::get_max_resolution(u32& width, u32& height) const {
 		const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 

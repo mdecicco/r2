@@ -17,6 +17,8 @@ namespace r2 {
 			f32 getAverageUpdateDuration() const;
 			void update(f32 dt);
 
+			virtual void updatesStarted() { }
+			virtual void updatesStopped() { }
 			virtual void doUpdate(f32 frameDelta, f32 updateDelta) = 0;
 			virtual void belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired) { }
 

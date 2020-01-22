@@ -206,6 +206,10 @@ class motion_system : public entity_system, periodic_update {
 		virtual void handle(event* evt) {
 		}
 		virtual void doUpdate(f32 frameDelta, f32 updateDelta) {
+			if (r2engine::input()->joystick_count() > 0) {
+				f32 rtrig = f32(r2engine::input()->joystick(0)->getJoyStickState().mAxes[5].abs) / 32767.0f;
+				updateDelta *= rtrig;
+			}
 			swarm->Update(updateDelta);
 			for (auto& boid : boids) {
 				vec3f pos(boid.Position.X, boid.Position.Y, boid.Position.Z);
@@ -281,6 +285,7 @@ class camera_entity : public scene_entity {
 			// a state becomes active.
 
 			time = 0.0f;
+			deadzone = 0.2f;
 		}
 
 		~camera_entity() {
@@ -292,6 +297,12 @@ class camera_entity : public scene_entity {
 			camera_sys::get()->addComponentTo(this);
 			camera->activate();
 			transform->transform = glm::lookAt(vec3f(0, SPAWN_RADIUS + 20.0f, -(SPAWN_RADIUS + 20.0f)), vec3f(0, 0, 0), vec3f(0, 1, 0));
+			j_pos = vec3f(0, 0, 0);
+			j_rot = mat4f(1.0f);
+			if (r2engine::input()->joystick_count() > 0) {
+				transform->transform = glm::translate(j_rot, j_pos);
+			}
+
 
 			vec2f screen = r2engine::get()->window()->get_size();
 			camera->projection = glm::perspective(glm::radians(60.0f), screen.y / screen.x, 0.01f, 500.0f);
@@ -299,9 +310,40 @@ class camera_entity : public scene_entity {
 
 		virtual void onUpdate(f32 frameDt, f32 updateDt) {
 			time += updateDt;
-			mat4f r(1.0f);
-			vec4f position = vec4f(0.0f,  SPAWN_RADIUS + 20.0f, -(SPAWN_RADIUS + 20.0f), 1.0f) * glm::rotate(r, glm::radians(time), vec3f(0, 1, 0));
-			transform->transform = glm::lookAt(vec3f(position), vec3f(0, 0, 0), vec3f(0, 1, 0));
+
+			if (r2engine::input()->joystick_count() > 0) {
+				auto js = r2engine::input()->joystick(0);
+				auto jState = js->getJoyStickState();
+				lstick = vec2f(f32(jState.mAxes[1].abs) / 32767.0f, f32(jState.mAxes[0].abs) / 32767.0f);
+				rstick = vec2f(f32(jState.mAxes[3].abs) / 32767.0f, f32(jState.mAxes[2].abs) / 32767.0f);
+
+				bool changed = false;
+
+				if (glm::length(lstick) > deadzone) {
+					vec3f translate = vec4f(-lstick.x, 0, -lstick.y, 1.0f) * j_rot;
+					translate *= 25.0f * updateDt;
+					j_pos += translate;
+					changed = true;
+				}
+
+				if (glm::length(rstick) > deadzone) {
+					if (rstick.x > deadzone || rstick.x < -deadzone) {
+						vec3f axis = vec4f(0, 1, 0, 1);
+						j_rot *= glm::rotate(mat4f(1.0f), rstick.x * 2.0f * updateDt, axis);
+					}
+					if (rstick.y > deadzone || rstick.y < -deadzone) {
+						vec3f axis = vec4f(1, 0, 0, 1) * j_rot;
+						j_rot *= glm::rotate(mat4f(1.0f), rstick.y * 2.0f * updateDt, axis);
+					}
+					changed = true;
+				}
+
+				if (changed) transform->transform = glm::translate(j_rot, j_pos);
+			} else {
+				mat4f r(1.0f);
+				vec4f position = vec4f(0.0f, SPAWN_RADIUS + 20.0f, -(SPAWN_RADIUS + 20.0f), 1.0f) * glm::rotate(r, glm::radians(time), vec3f(0, 1, 0));
+				transform->transform = glm::lookAt(vec3f(position), vec3f(0, 0, 0), vec3f(0, 1, 0));
+			}
 		}
 
 		virtual void onEvent(event* evt) {
@@ -321,6 +363,12 @@ class camera_entity : public scene_entity {
 		}
 
 		f32 time;
+		vec2f lstick;
+		vec2f rstick;
+		f32 deadzone;
+
+		vec3f j_pos;
+		mat4f j_rot;
 };
 
 class test_entity : public scene_entity {
@@ -341,7 +389,7 @@ class test_entity : public scene_entity {
 			setUpdateFrequency(60.0f);
 			stop_periodic_updates();
 			transform_sys::get()->addComponentTo(this);
-			motion_system::get()->addComponentTo(this);
+			if (id() != 2) motion_system::get()->addComponentTo(this);
 			mesh_sys::get()->addComponentTo(this);
 			mesh->set_node(node);
 			r2engine::get()->remove_child(this);

@@ -59,8 +59,17 @@ namespace r2 {
         m_attrs.push_back(type);
 		m_attrNames.push_back(name);
 		m_attrOffsets.push_back(m_uniformSize);
+		// because of the way opengl pads uniform buffers, (and subsequently the driver has
+		// to determine uniform attribute sizes), the size of an attribute can change depending
+		// on the attribute that comes _after_ it. So we have to recalculate the size of _all_
+		// attributes when one is added
 
-        m_uniformSize += driver->get_uniform_attribute_size(type);
+		m_uniformSize = 0;
+		for (u16 i = 0;i < m_attrs.size();i++) {
+			m_attrOffsets[i] = m_uniformSize;
+			m_uniformSize += driver->get_uniform_attribute_size(this, i, m_attrs[i]);
+		}
+
         if(m_fmtString.length() > 0) m_fmtString += ", ";
         m_fmtString += attr_names[type] + " " + name;
 		m_hashName += attr_hash_names[type];
@@ -190,12 +199,12 @@ namespace r2 {
 			return;
 		}
 
-		if (seg.memBegin > m_format->size() * m_uniformCount) {
+		if (seg.memBegin > m_format->size() * m_maxCount) {
 			r2Error("Out of range segment.memBegin (%llu) provided to uniform_buffer::update", seg.memBegin);
 			return;
 		}
 
-		if (seg.memEnd > m_format->size() * m_uniformCount) {
+		if (seg.memEnd > m_format->size() * m_maxCount) {
 			r2Error("Out of range segment.memEnd (%llu) provided to uniform_buffer::update", seg.memEnd);
 			return;
 		}
@@ -214,7 +223,7 @@ namespace r2 {
 		for (u16 i = 0;i < attrNames.size();i++) {
 			uniform_attribute_type type = attrs[i];
 			m_uniformOffsetMap[attrNames[i]] = fmt->offsetOf(i);
-			m_uniformSizeMap[attrNames[i]] = r2engine::get()->renderer()->driver()->get_uniform_attribute_size(type);
+			m_uniformSizeMap[attrNames[i]] = r2engine::get()->renderer()->driver()->get_uniform_attribute_size(fmt, i, type);
 			m_uniformIndexMap[attrNames[i]] = i;
 		}
 	}
@@ -228,11 +237,13 @@ namespace r2 {
 			r2Error("No uniform with name \"%s\" exists in block \"%s\". Ignoring", name.c_str(), m_name.c_str());
 			return;
 		}
-		uniform_attribute_type type = m_bufferSegment.buffer->format()->attributes()[m_uniformIndexMap[name]];
+
+		u16 idx = m_uniformIndexMap[name];
+		uniform_attribute_type type = m_bufferSegment.buffer->format()->attributes()[idx];
 		static u8 castSpace[2048];
 		
 		// cast value to the format that the driver expects to see, if necessary
-		r2engine::get()->renderer()->driver()->serialize_uniform_value(value, castSpace, type);
+		r2engine::get()->renderer()->driver()->serialize_uniform_value(value, castSpace, m_bufferSegment.buffer->format(), idx, type);
 
 		// fill the buffer segment with the value in the new format
 		m_bufferSegment.buffer->update(getSegmentForField(name), castSpace);
@@ -288,9 +299,17 @@ namespace r2 {
 			if (sceneFmt.size() > 0) return &sceneFmt;
 			if (!r2engine::get()->renderer()->driver()) { r2Error("The static scene uniform format can't be created until a render driver is specified"); }
 			else {
-				sceneFmt.add_attr("transform", uat_mat4f);
+				sceneFmt.add_attr("view", uat_mat4f);
 				sceneFmt.add_attr("projection", uat_mat4f);
 				sceneFmt.add_attr("view_proj", uat_mat4f);
+				sceneFmt.add_attr("invView", uat_mat4f);
+				sceneFmt.add_attr("camera_pos", uat_vec3f);
+				sceneFmt.add_attr("camera_left", uat_vec3f);
+				sceneFmt.add_attr("camera_up", uat_vec3f);
+				sceneFmt.add_attr("camera_forward", uat_vec3f);
+				sceneFmt.add_attr("camera_near", uat_float);
+				sceneFmt.add_attr("camera_far", uat_float);
+				sceneFmt.add_attr("camera_fov", uat_float);
 			}
 			return &sceneFmt;
 		}

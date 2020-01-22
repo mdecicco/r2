@@ -15,6 +15,10 @@ namespace r2 {
 		m_instance = node->instantiate();
 	}
 
+	void mesh_component::release_node() {
+		if (m_instance) m_instance.release();
+	}
+
 	render_node* mesh_component::get_node() {
 		return m_instance.node();
 	}
@@ -217,6 +221,10 @@ namespace r2 {
 		args.GetReturnValue().Set(scope.Escape(arr));
 	}
 
+	void mesh_component::set_instance_transform(const mat4f& transform) {
+		m_instance.update_instance_transform(transform);
+	}
+
 	size_t mesh_component::get_max_vertex_count() {
 		if (!m_instance) {
 			r2Error("Attempted to get mesh component's max vertex count when the mesh doesn't have a valid reference to a node");
@@ -259,12 +267,14 @@ namespace r2 {
 	}
 
 	void mesh_sys::initialize_entity(scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		entity->bind(this, "add_mesh_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->addComponentTo(entity);
 		});
 	}
 
 	void mesh_sys::deinitialize_entity(scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		auto s = state();
 		s.enable();
 		if (!s->contains_entity(entity->id())) {
@@ -283,34 +293,39 @@ namespace r2 {
 
 	void mesh_sys::bind(scene_entity_component* component, scene_entity* entity) {
 		using c = mesh_component;
-		entity->unbind("add_mesh_component");
-		entity->bind(this, "remove_mesh_component", [](entity_system* system, scene_entity* entity, v8Args args) {
-			system->removeComponentFrom(entity);
-		});
+		if (entity->is_scripted()) {
+			entity->unbind("add_mesh_component");
+			entity->bind(this, "remove_mesh_component", [](entity_system* system, scene_entity* entity, v8Args args) {
+				system->removeComponentFrom(entity);
+			});
 
-		bind_instance_data((mesh_component*)component, entity);
-		bind_vertex_data((mesh_component*)component, entity);
-		bind_index_data((mesh_component*)component, entity);
-		bind_node((mesh_component*)component, entity);
+			bind_instance_data((mesh_component*)component, entity);
+			bind_vertex_data((mesh_component*)component, entity);
+			bind_index_data((mesh_component*)component, entity);
+			bind_node((mesh_component*)component, entity);
+		}
 
 		entity->mesh = component_ref<mesh_component*>(this, component->id());
 	}
 
 	void mesh_sys::unbind(scene_entity* entity) {
-		entity->unbind("node");
-		entity->unbind("instance");
-		entity->unbind("max_vertex_count");
-		entity->unbind("vertex_count");
-		entity->unbind("get_vertices");
-		entity->unbind("set_vertices");
-		entity->unbind("max_index_count");
-		entity->unbind("index_count");
-		entity->unbind("get_indices");
-		entity->unbind("set_indices");
-		entity->bind(this, "add_mesh_component", [](entity_system* system, scene_entity* entity, v8Args args) {
-			system->addComponentTo(entity);
-		});
+		if (entity->is_scripted()) {
+			entity->unbind("node");
+			entity->unbind("instance");
+			entity->unbind("max_vertex_count");
+			entity->unbind("vertex_count");
+			entity->unbind("get_vertices");
+			entity->unbind("set_vertices");
+			entity->unbind("max_index_count");
+			entity->unbind("index_count");
+			entity->unbind("get_indices");
+			entity->unbind("set_indices");
+			entity->bind(this, "add_mesh_component", [](entity_system* system, scene_entity* entity, v8Args args) {
+				system->addComponentTo(entity);
+			});
+		}
 
+		entity->mesh->release_node();
 		entity->mesh.clear();
 	}
 
@@ -324,6 +339,7 @@ namespace r2 {
 	}
 
 	void mesh_sys::bind_instance_data(mesh_component* component, scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		auto get = v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
 			entity->mesh->get_instance_data(args);
 		});
@@ -334,6 +350,7 @@ namespace r2 {
 	}
 
 	void mesh_sys::bind_vertex_data(mesh_component* component, scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		entity->bind(component, "max_vertex_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
 			entity->mesh->get_max_vertex_count(args);
 		}), Local<Function>(), PropertyAttribute::ReadOnly);
@@ -352,6 +369,7 @@ namespace r2 {
 	}
 
 	void mesh_sys::bind_index_data(mesh_component* component, scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		entity->bind(component, "max_index_count", v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
 			entity->mesh->get_max_index_count(args);
 		}), Local<Function>(), PropertyAttribute::ReadOnly);
@@ -370,6 +388,7 @@ namespace r2 {
 	}
 
 	void mesh_sys::bind_node(mesh_component* component, scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		auto get = v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
 			render_node* node = entity->mesh->get_node();
 			if (!node) args.GetReturnValue().Set(v8::Null(args.GetIsolate()));

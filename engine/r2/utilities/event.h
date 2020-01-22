@@ -6,8 +6,13 @@
 
 #define evt(name,...) event(__FILE__, __LINE__, name, ##__VA_ARGS__)
 
-#define EVT_NAME_ACTIVATE_STATE "~0"
-#define EVT_NAME_DESTROY_ENTITY	"~1"
+#define EVT_NAME_ACTIVATE_STATE			"~0"
+#define EVT_NAME_DESTROY_ENTITY			"~1"
+#define EVT_NAME_ENABLE_ENTITY_UPDATES	"~2"
+#define EVT_NAME_DISABLE_ENTITY_UPDATES	"~3"
+#define EVT_NAME_MOUSE_EVENT			"MouseEvent"
+#define EVT_NAME_KEYBOARD_EVENT			"KeyEvent"
+#define EVT_NAME_JOYSTICK_EVENT			"JoystickEvent"
 
 namespace r2 {
     class data_container;
@@ -39,6 +44,7 @@ namespace r2 {
             void stop_propagating() { m_recurse = false; }
 
 			void set_json_from_cpp(const var& v);
+			void set_json_from_str(const mstring& v);
 			void set_json(v8Args args);
 			v8::Local<v8::Value> get_json();
 
@@ -82,4 +88,4 @@ namespace r2 {
 			mlist<mstring>* m_subscribesTo;
 			event_receiver* m_parent;
     };
-}
+};

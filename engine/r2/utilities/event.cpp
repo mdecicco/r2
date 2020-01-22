@@ -11,7 +11,10 @@ namespace r2 {
 			m_data = r2engine::get()->files()->create(DM_BINARY, "event_data");
 			__set_temp_engine_state_ref(nullptr);
 			m_internalOnly = true;
-		} else m_data = nullptr;
+		} else {
+			m_data = nullptr;
+			m_internalOnly = false;
+		}
     }
 
 	event::event(const event& o) {
@@ -66,6 +69,10 @@ namespace r2 {
     }
 
 	void event::set_json_from_cpp(const var& v) {
+		m_jsonData = v;
+	}
+
+	void event::set_json_from_str(const mstring& v) {
 		m_jsonData = v;
 	}
 
@@ -137,6 +144,7 @@ namespace r2 {
             }
         }
     }
+
 	void event_receiver::subscribe(const mstring& eventName) {
 		m_subscribesTo->push_front(eventName);
 	}
@@ -169,8 +177,6 @@ namespace r2 {
 	}
 
     void event_receiver::dispatch(event* e) {
-        if(e->data()) e->data()->set_position(0);
-
 		bool subscribesTo = true;
 		if (m_subscribesTo->size() > 0) {
 			subscribesTo = false;
@@ -186,6 +192,7 @@ namespace r2 {
 		if (subscribesTo) {
 			// ensure derived classes operate in their own memory scopes (or default to global)
 			memory_man::push_current(m_memory);
+			if(e->data()) e->data()->set_position(0);
 			handle(e);
 			memory_man::pop_current();
 		}
@@ -199,7 +206,9 @@ namespace r2 {
 	void event_receiver::dispatchAtFrameStart(event* e) {
 		memory_man::push_current(memory_man::global());
 		if (m_isAtFrameStart) {
-			m_nextFrameStartEvents->push_back(new event(*e));
+			//m_nextFrameStartEvents->push_back(new event(*e));
+			dispatch(e);
+			memory_man::pop_current();
 			return;
 		}
 

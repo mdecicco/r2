@@ -18,11 +18,13 @@ namespace r2 {
 	}
 
 	void transform_sys::initialize_entity(scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		entity->bind(this, "add_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->addComponentTo(entity);
 		});
 	}
 	void transform_sys::deinitialize_entity(scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		auto s = state();
 		s.enable();
 		if (!s->contains_entity(entity->id())) {
@@ -41,18 +43,22 @@ namespace r2 {
 
 	void transform_sys::bind(scene_entity_component* component, scene_entity* entity) {
 		using c = transform_component;
-		entity->unbind("add_transform_component");
-		entity->bind(component, "transform", &c::transform, false, true, &cascade_mat4f, "full_transform");
-		entity->bind(this, "remove_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
-			system->removeComponentFrom(entity);
-		});
-		entity->transform = component_ref<transform_component*>(this, component->id());
+		if (entity->is_scripted()) {
+			entity->unbind("add_transform_component");
+			entity->bind(component, "transform", &c::transform, false, true, &cascade_mat4f, "full_transform");
+			entity->bind(this, "remove_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
+				system->removeComponentFrom(entity);
+			});
+		}
+		entity->transform = component_ref<c*>(this, component->id());
 	}
 	void transform_sys::unbind(scene_entity* entity) {
-		entity->unbind("transform");
-		entity->bind(this, "add_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
-			system->addComponentTo(entity);
-		});
+		if (entity->is_scripted()) {
+			entity->unbind("transform");
+			entity->bind(this, "add_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
+				system->addComponentTo(entity);
+			});
+		}
 		entity->transform.clear();
 	}
 

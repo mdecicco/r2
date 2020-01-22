@@ -4,6 +4,19 @@
 #include <v8pp/convert.hpp>
 
 using namespace v8;
+namespace v8pp {
+	template<>
+	struct convert<r2::log_info> {
+		using from_type = r2::log_info;
+		using to_type = v8::Handle<v8::Object>;
+
+		static bool is_valid(v8::Isolate* isolate, v8::Handle<v8::Value> value);
+
+		static r2::log_info from_v8(v8::Isolate* isolate, v8::Handle<v8::Object> obj);
+
+		static v8::Handle<v8::Object> to_v8(v8::Isolate* isolate, r2::log_info const& value);
+	};
+};
 using namespace v8pp;
 
 namespace r2 {

@@ -19,6 +19,7 @@ namespace r2 {
 			operator GLFWwindow*() { return m_window; }
 			f64 elapsed();
 			vec2i get_size() const;
+			vec2i get_cursor() const;
 			void get_max_resolution(u32& width, u32& height) const;
 
 		protected:

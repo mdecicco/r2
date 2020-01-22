@@ -18,7 +18,7 @@ namespace r2 {
 			virtual void deactivate();
 			virtual bool check_compatible(render_node* node);
 
-			virtual u32 get_uniform_location(const mstring& name);
+			virtual i32 get_uniform_location(const mstring& name);
 			virtual void uniform1i(u32 loc, i32 value);
 			virtual void uniform2i(u32 loc, i32 v0, i32 v1);
 			virtual void uniform3i(u32 loc, i32 v0, i32 v1, i32 v2);
@@ -69,6 +69,7 @@ namespace r2 {
 			virtual void uniform_matrix_4x2f(u32 loc, u32 count, f32* values);
 			virtual void uniform_matrix_4x3d(u32 loc, u32 count, f64* values);
 			virtual void uniform_matrix_4x3f(u32 loc, u32 count, f32* values);
+			virtual void texture2D(u32 loc, u32 index, texture_buffer* texture);
 
 		protected:
 			friend class gl_render_driver;
@@ -91,9 +92,20 @@ namespace r2 {
 			virtual void unbind_vao();
             virtual void sync_buffer(gpu_buffer* buf);
 			virtual void free_buffer(gpu_buffer* buf);
+			virtual void sync_texture(texture_buffer* buf);
+			virtual void free_texture(texture_buffer* buf);
+			virtual void present_texture(texture_buffer* buf, shader_program* shader, render_buffer* target = 0);
+			virtual void sync_render_target(render_buffer* buf);
+			virtual void free_render_target(render_buffer* buf);
+			virtual void bind_render_target(render_buffer* buf);
+			virtual void fetch_render_target_pixel(render_buffer* buf, u32 x, u32 y, size_t attachmentIdx, void* dest, size_t pixelSize);
+			GLuint get_texture_id(texture_buffer* buf);
 			virtual void bind_uniform_block(shader_program* shader, uniform_block* uniforms);
-			virtual size_t get_uniform_attribute_size(uniform_attribute_type type) const;
-			virtual void serialize_uniform_value(const void* input, void* output, uniform_attribute_type type) const;
+			virtual void clear_framebuffer(const vec4f& color, bool clearDepth);
+			virtual void set_viewport(const vec2i& position, const vec2i& dimensions);
+
+			virtual size_t get_uniform_attribute_size(uniform_format* fmt, u16 idx, uniform_attribute_type type) const;
+			virtual void serialize_uniform_value(const void* input, void* output, uniform_format* fmt, u16 idx, uniform_attribute_type type) const;
 			virtual size_t get_uniform_buffer_block_offset_alignment() const;
 			virtual void render_node(r2::render_node* node, uniform_block* scene);
 
@@ -101,7 +113,13 @@ namespace r2 {
         protected:
             render_man* m_mgr;
 			munordered_map<size_t, GLuint> m_buffers;
+			munordered_map<size_t, GLuint> m_textures;
+			munordered_map<size_t, std::pair<GLuint, GLuint>> m_targets;
 			munordered_map<mstring, GLuint> m_vaos;
+			render_buffer* m_target;
+
+			GLuint m_fsqVao;
+			GLuint m_fsqVbo;
     };
 
     class gl_draw_call : public draw_call {

@@ -26,7 +26,7 @@ namespace r2 {
 		return m_data;
 	}
     idx_bo_segment index_buffer::append(const void *data, size_t count) {
-        if(count >= m_maxCount - m_indexCount) {
+        if(count > m_maxCount - m_indexCount) {
             r2Error("Insufficient space in index buffer of type [%s] for %d indices (%d max) (buf: %d)", index_names[m_type], count, m_maxCount, m_id);
             idx_bo_segment seg;
             seg.buffer = nullptr;

@@ -55,6 +55,7 @@ namespace r2 {
 	class transform_component;
 	class camera_component;
 	class mesh_component;
+	class physics_component;
 
 	class scene_entity : public event_receiver, public periodic_update {
 		public:
@@ -65,9 +66,11 @@ namespace r2 {
 			/* Accessors */
 			inline entityId id() const { return m_id; }
 			inline const mstring& name() const { return *m_name; }
-			inline bool destroyed() { return m_destroyed; }
-			inline bool is_scripted() { return m_scripted; }
+			inline bool destroyed() const { return m_destroyed; }
+			inline bool is_scripted() const { return m_scripted; }
 			inline scene_entity* parent() const { return m_parent; }
+			inline bool doesUpdate() const { return m_doesUpdate; }
+			inline bool has_children() const { return m_children->size() > 0; }
 
 			/* Functions for scripted entities */
 			void call(const mstring& function, u8 argc = 0, LocalValueHandle* args = nullptr);
@@ -77,6 +80,7 @@ namespace r2 {
 
 			template<typename T, typename U, typename C = U (*)(const U&, const U&)>
 			bool bind(scene_entity_component* component, const mstring& prop, U T::*member, bool readonly = false, bool cascades = false, C cascadeFunc = nullptr, const mstring& cascadedPropName = "") {
+				if (!m_scripted) return false;
 				if (!ensure_object_handle()) return false;
 				if (cascades && !cascadeFunc) {
 					r2Error("Property \"%s\" was specified to be cascading, but no cascade function was specified. Property will not have cascaded get accessor", prop.c_str());
@@ -147,14 +151,25 @@ namespace r2 {
 			virtual void willBeDestroyed() { }
 			
 			/* Functions for both */
+			void set_name(const mstring& name);
 			void destroy();
 			void add_child_entity(scene_entity* entity);
 			void remove_child_entity(scene_entity* entity);
+			mvector<scene_entity*> children();
+			
+			template <typename F>
+			void for_each_child(F&& callback) {
+				auto& children = *m_children;
+				for (scene_entity* child : children) {
+					callback(child);
+				}
+			}
 	
 			/* For convenience */
 			component_ref<transform_component*> transform;
 			component_ref<camera_component*> camera;
 			component_ref<mesh_component*> mesh;
+			component_ref<physics_component*> physics;
 
 		private:
 			friend class r2engine;
@@ -164,6 +179,8 @@ namespace r2 {
 			void initialize();
 			void deferred_destroy();
 
+			virtual void updatesStarted();
+			virtual void updatesStopped();
 			virtual void handle(event* evt);
 			virtual void doUpdate(f32 frameDt, f32 updateDt);
 			virtual void belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired);
@@ -179,6 +196,7 @@ namespace r2 {
 			entityId m_id;
 			bool m_destroyed;
 			bool m_scripted;
+			bool m_doesUpdate;
 	};
 
 	class entity_system_state : public engine_state_data {
@@ -192,7 +210,7 @@ namespace r2 {
 
 			template <typename T, typename ... construction_args>
 			T* create(entityId forEntity, construction_args ... args) {
-				T* comp = m_components->set<T>(scene_entity_component::nextId(), args...);
+				T* comp = m_components->construct<T>(scene_entity_component::nextId(), args...);
 				(*m_entityComponentIds)[forEntity] = comp->id();
 				return comp;
 			}
@@ -277,6 +295,8 @@ namespace r2 {
 		public:
 			scene_entity_component();
 			~scene_entity_component();
+
+			virtual void destroy() { }
 
 			static inline componentId nextId() { return nextComponentId; }
 

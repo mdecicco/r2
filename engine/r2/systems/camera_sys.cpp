@@ -20,12 +20,14 @@ namespace r2 {
 	}
 
 	void camera_sys::initialize_entity(scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		entity->bind(this, "add_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 			system->addComponentTo(entity);
 		});
 	}
 
 	void camera_sys::deinitialize_entity(scene_entity* entity) {
+		if (!entity->is_scripted()) return;
 		auto s = state();
 		s.enable();
 		if (!s->contains_entity(entity->id())) {
@@ -44,24 +46,28 @@ namespace r2 {
 
 	void camera_sys::bind(scene_entity_component* component, scene_entity* entity) {
 		using c = camera_component;
-		entity->unbind("add_camera_component");
+		if (entity->is_scripted()) {
+			entity->unbind("add_camera_component");
 
-		entity->bind(component, "projection", &c::projection);
-		entity->bind(component, "active", &c::active, true);
-		entity->bind(this, "activate", [](entity_system* sys, scene_entity* entity, v8Args args) {
-			((camera_sys*)sys)->activate_camera(entity);
-		});
-		entity->bind(this, "remove_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
-			system->removeComponentFrom(entity);
-		});
-		entity->camera = component_ref<camera_component*>(this, component->id());
+			entity->bind(component, "projection", &c::projection);
+			entity->bind(component, "active", &c::active, true);
+			entity->bind(this, "activate", [](entity_system* sys, scene_entity* entity, v8Args args) {
+				((camera_sys*)sys)->activate_camera(entity);
+			});
+			entity->bind(this, "remove_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
+				system->removeComponentFrom(entity);
+			});
+		}
+		entity->camera = component_ref<c*>(this, component->id());
 	}
 
 	void camera_sys::unbind(scene_entity* entity) {
-		entity->unbind("camera");
-		entity->bind(this, "add_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
-			system->addComponentTo(entity);
-		});
+		if (entity->is_scripted()) {
+			entity->unbind("camera");
+			entity->bind(this, "add_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
+				system->addComponentTo(entity);
+			});
+		}
 		
 		scene* curScene = r2engine::get()->current_scene();
 		if (curScene && curScene->camera == entity) {
