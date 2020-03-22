@@ -22,9 +22,14 @@ namespace r2 {
 		memory_block* next;
 	};
 
+	struct free_list {
+		memory_block* block;
+		free_list* next;
+	};
+
 	class memory_allocator {
 		public:
-			memory_allocator(size_t max_size);
+			memory_allocator(size_t max_size, size_t max_free_pool_size = 0);
 			~memory_allocator();
 
 			void* allocate(size_t size);
@@ -49,6 +54,10 @@ namespace r2 {
 			void* reallocate_called_from_other_allocator(memory_block* block, void* ptr, size_t size, allocator_id otherAllocatorId);
 
 			memory_block* find_available(size_t size);
+			free_list* get_empty_free_list_node();
+			bool add_to_free_list(memory_block* block);
+			void* get_free_list_node(size_t size);
+
 
 			void* m_base;
 			allocator_id m_id;
@@ -59,6 +68,11 @@ namespace r2 {
 			memory_allocator* m_next;
 			memory_allocator* m_last;
 			memory_block* m_baseBlock;
+			// 8, 16, 32, 64, 128, 256
+			void* m_freePoolMem;
+			free_list m_emptyFreePools;
+			free_list m_freePools[6];
+			size_t m_size_in_free_pools;
 	};
 
 	class memory_man {

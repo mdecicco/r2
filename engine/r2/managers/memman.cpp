@@ -2,7 +2,8 @@
 #include <cstdlib>
 
 namespace r2 {
-	static bool use_malloc = true;
+	static bool use_malloc = false;
+	FILE* tfp = nullptr;
 
 	memory_block* blockFromPtr(void *data) {
 		return (memory_block*)((u8*)data - sizeof(memory_block));
@@ -34,9 +35,10 @@ namespace r2 {
 	memory_allocator::memory_allocator() : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(0), m_used(0), m_blockCount(0), m_baseBlock(nullptr) {
 		m_id = 1;
 		m_mergeCounter = 50;
+		m_size_in_free_pools = 0;
 	}
 
-	memory_allocator::memory_allocator(size_t max_size) : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(max_size), m_used(0), m_blockCount(0) {
+	memory_allocator::memory_allocator(size_t max_size, size_t max_free_pool_size) : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(max_size), m_used(0), m_blockCount(0) {
 		m_last = r2engine::memory()->get_deepest_allocator();
 		m_last->m_next = this;
 		m_base = memory_man::global()->allocate(max_size);
@@ -48,11 +50,32 @@ namespace r2 {
 		m_blockCount++;
 		m_id = m_last->m_id + 1;
 		m_mergeCounter = 50;
+		m_size_in_free_pools = 0;
+
+		size_t pool_size = max_free_pool_size;
+		if (pool_size == 0) pool_size = max_size * 0.1;
+		if (pool_size < sizeof(free_list) * 512) pool_size = sizeof(free_list) * 512;
+		size_t free_list_count = pool_size / sizeof(free_list);
+		pool_size = free_list_count * sizeof(free_list);
+
+		m_freePoolMem = memory_man::global()->allocate(pool_size);
+		free_list* nodes = (free_list*)m_freePoolMem;
+		m_emptyFreePools.block = nullptr;
+		m_emptyFreePools.next = nodes;
+		for (size_t i = 0;i < free_list_count;i++) {
+			nodes[i].block = nullptr;
+			nodes[i].next = i < free_list_count - 1 ? &nodes[i + 1] : nullptr;
+		}
+		for (u8 i = 0;i < 6;i++) {
+			m_freePools[i].block = nullptr;
+			m_freePools[i].next = nullptr;
+		}
 	}
 
 	memory_allocator::~memory_allocator() {
 		if (m_last) {
 			memory_man::global()->deallocate_from_self(m_base);
+			memory_man::global()->deallocate_from_self(m_freePoolMem);
 			m_last->m_next = m_next;
 			if (m_next) m_next->m_last = m_last;
 		}
@@ -60,7 +83,13 @@ namespace r2 {
 	}
 
 	void* memory_allocator::allocate(size_t size) {
+		//if (tfp) fprintf(tfp, "%llu,", size);
 		if (use_malloc) return malloc(size);
+
+		// check if there is a free block that fits this size
+		void* mem = get_free_list_node(size);
+		if (mem) return mem;
+
 		if (size > m_size - m_used) {
 			if (m_id == 1) printf("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
 			else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
@@ -222,6 +251,8 @@ namespace r2 {
 		memory_block* block = blockFromPtr(ptr);
 		assert(block->used == m_id);
 
+		if (add_to_free_list(block)) return;
+
 		block->used = false;
 		m_used -= block->size;
 
@@ -281,7 +312,7 @@ namespace r2 {
 				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
 				nextBlock->next = blockAfterNext;
 				nextBlock->size = oldNextSize - sizeDiff;
-				nextBlock->used = false;
+				nextBlock->used = add_to_free_list(nextBlock);
 
 				block->next = nextBlock;
 
@@ -290,25 +321,7 @@ namespace r2 {
 				// nope. allocate a new one, copy this one to it, and deallocate this one
 				void* newPtr = allocate(size);
 				memcpy(newPtr, ptr, block->size);
-
-				block->used = false;
-				m_used -= block->size;
-
-				if (block->next && !block->next->used) {
-					// merge with next
-					block->size += block->next->size + sizeof(memory_block);
-					block->next = block->next->next;
-					checkSize(block);
-					m_used -= sizeof(memory_block);
-					m_blockCount--;
-				}
-
-				// can't merge backwards here because of the lack of memory_block::last,
-				// merge forward from the beginning instead every so often
-
-				m_mergeCounter--;
-				if (m_mergeCounter == 0) merge_adjacent_blocks();
-
+				deallocate(ptr);
 				return newPtr;
 			}
 		} else {
@@ -324,7 +337,7 @@ namespace r2 {
 				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
 				nextBlock->next = blockAfterNext;
 				nextBlock->size = oldNextSize + sizeDiff;
-				nextBlock->used = false;
+				nextBlock->used = add_to_free_list(nextBlock);
 
 				block->next = nextBlock;
 
@@ -339,7 +352,7 @@ namespace r2 {
 				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
 				nextBlock->next = oldNextBlock;
 				nextBlock->size = sizeDiff - sizeof(memory_block);
-				nextBlock->used = false;
+				nextBlock->used = add_to_free_list(nextBlock);
 
 				block->next = nextBlock;
 
@@ -415,6 +428,64 @@ namespace r2 {
 		return nullptr;
 	}
 
+	free_list* memory_allocator::get_empty_free_list_node() {
+		if (!m_emptyFreePools.next) return nullptr;
+		free_list* next = m_emptyFreePools.next;
+		m_emptyFreePools.next = next->next;
+		return next;
+	}
+
+	bool memory_allocator::add_to_free_list(memory_block* block) {
+		size_t psz = 8;
+		u8 pidx = 0;
+		for (u8 i = 0;i < 6;i++) {
+			if (block->size >= psz && block->size < psz * 2) break;
+			pidx++;
+			psz *= 2;
+		}
+		if (pidx < 6) {
+			// this block can fit in a free pool
+			free_list* node = get_empty_free_list_node();
+			if (node) {
+				node->block = block;
+				node->next = m_freePools[pidx].next;
+				m_freePools[pidx].next = node;
+				m_size_in_free_pools += block->size;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void* memory_allocator::get_free_list_node(size_t size) {
+		u16 sz = 8;
+		u8 pidx = 0;
+		for (u8 i = 0;i < 6;i++) {
+			if (size <= sz) break;
+			pidx++;
+			sz *= 2;
+		}
+		if (pidx == 6) return nullptr;
+
+		free_list* pool = m_freePools[pidx].next;
+		if (!pool) return nullptr;
+
+		// remove from free pool
+		m_freePools[pidx].next = pool->next;
+
+		// store represented memory block
+		memory_block* block = pool->block;
+
+		// insert into empty node list
+		pool->block = nullptr;
+		pool->next = m_emptyFreePools.next;
+		m_emptyFreePools.next = pool;
+
+		m_size_in_free_pools -= block->size;
+
+		return ptrFromBlock(block);
+	}
+
 
 	memory_man* memory_man::get() {
 		if (!memory_man::instance) {
@@ -425,6 +496,8 @@ namespace r2 {
 	}
 
 	memory_man::memory_man() {
+		//tfp = fopen("memstat.txt", "w");
+		//if (!tfp) printf("Failed to create memstat.txt");
 		FILE* fp = fopen("mem.ini", "rb");
 		if (!fp) {
 			printf("No mem.ini found. Creating one, maximum memory usage by this application is now 32 MB. Take that.\n");
@@ -433,6 +506,8 @@ namespace r2 {
 				m_memSize = MBtoB(32);
 				fprintf(fp, "%llu", m_memSize);
 				fclose(fp);
+			} else {
+				printf("Failed to create mem.ini...\n");
 			}
 		} else {
 			fseek(fp, 0, SEEK_END);
@@ -472,6 +547,25 @@ namespace r2 {
 		m_baseAllocator.m_baseBlock->used = false;
 		m_baseAllocator.m_used = sizeof(memory_block);
 		m_baseAllocator.m_blockCount++;
+
+		size_t pool_size = m_memSize * 0.1;
+		if (pool_size < sizeof(free_list) * 512) pool_size = sizeof(free_list) * 512;
+		size_t free_list_count = pool_size / sizeof(free_list);
+		pool_size = free_list_count * sizeof(free_list);
+
+		m_baseAllocator.m_freePoolMem = malloc(pool_size);
+		free_list* nodes = (free_list*)m_baseAllocator.m_freePoolMem;
+		m_baseAllocator.m_emptyFreePools.block = nullptr;
+		m_baseAllocator.m_emptyFreePools.next = nodes;
+		for (size_t i = 0;i < free_list_count;i++) {
+			nodes[i].block = nullptr;
+			nodes[i].next = i < free_list_count - 1 ? &nodes[i + 1] : nullptr;
+		}
+		for (u8 i = 0;i < 6;i++) {
+			m_baseAllocator.m_freePools[i].block = nullptr;
+			m_baseAllocator.m_freePools[i].next = nullptr;
+		}
+
 		m_allocatorStack = (allocator_stack*)m_baseAllocator.allocate(sizeof(allocator_stack));
 		m_allocatorStack->last = nullptr;
 		m_allocatorStack->next = nullptr;
@@ -479,7 +573,9 @@ namespace r2 {
 	}
 
 	memory_man::~memory_man() {
+		fclose(tfp);
 		free(m_base);
+		free(m_baseAllocator.m_freePoolMem);
 	}
 
 	memory_allocator* memory_man::get_allocator_by_id(allocator_id id) {
