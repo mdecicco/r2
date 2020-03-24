@@ -70,10 +70,15 @@ namespace r2 {
 	void r2engine::create(int argc, char** argv) {
 		if (instance) return;
 
+		memory_man::current()->slow_check();
 		r2engine::register_system(transform_sys::get());
+		memory_man::current()->slow_check();
 		r2engine::register_system(camera_sys::get());
+		memory_man::current()->slow_check();
 		r2engine::register_system(mesh_sys::get());
+		memory_man::current()->slow_check();
 		r2engine::register_system(physics_sys::get());
+		memory_man::current()->slow_check();
 
 		logMgr = new log_man();
 		instance = new r2engine(argc, argv);

@@ -445,7 +445,7 @@ class test_entity : public scene_entity {
 
 class test_state : public state {
 	public:
-		test_state() : state("TestState", MBtoB(15)), cubes(nullptr) {
+		test_state() : state("TestState", MBtoB(20)), cubes(nullptr) {
 			// This state's memory has not been allocated yet. Any
 			// allocations made here will be either in the global
 			// scope, or the scope of the currently active state.
@@ -558,12 +558,18 @@ class test_state : public state {
 };
 
 int main(int argc, char** argv) {
+	memory_man::current()->slow_check();
 	r2engine::register_system(motion_system::get());
+	memory_man::current()->slow_check();
 	r2engine::create(argc, argv);
+	memory_man::current()->slow_check();
 	auto eng = r2engine::get();
+	memory_man::current()->slow_check();
 
 	eng->open_window(512, 512, "Unscripted Test", true);
+	memory_man::current()->slow_check();
 	eng->renderer()->set_driver(new gl_render_driver(eng->renderer()));
+	memory_man::current()->slow_check();
 
 	test_state* state = new test_state();
 	eng->states()->register_state(state);

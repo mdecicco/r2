@@ -28,6 +28,7 @@ namespace r2 {
 			inline size_t getMaxMemorySize() const { return m_memory->size(); }
 			inline size_t getUsedMemorySize() const { return m_memory->used(); }
 			inline bool is_scripted() const { return m_scripted; }
+			inline memory_allocator* getMemory() { return m_memory; }
 
 			/* Functions for derived classes */
 			virtual void onInitialize() { }

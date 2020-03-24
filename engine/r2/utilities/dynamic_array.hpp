@@ -1,7 +1,16 @@
 #pragma once
-#include <r2/managers/memman.h>
+#include <r2/config.h>
+#include <vector>
+#include <unordered_map>
+using namespace std;
 
 namespace r2 {
+	class memory_allocator;
+	void* r2alloc(size_t sz);
+	void* r2calloc(size_t count, size_t size);
+	void* r2realloc(void* ptr, size_t sz);
+	void r2free(void* ptr);
+
 	class untyped_dynamic_pod_array {
 		public:
 			untyped_dynamic_pod_array(size_t elementSize) : m_elementSize(elementSize), m_count(0), m_capacity(16), m_data(new u8[elementSize * 16]) {
@@ -193,8 +202,8 @@ namespace r2 {
 				m_offsets.clear();
 			}
 
-			mvector<K> keys() const {
-				mvector<K> keys;
+			vector<K> keys() const {
+				vector<K> keys;
 				for(auto& key : m_offsets) {
 					keys.push_back(key.first);
 				}
@@ -203,20 +212,21 @@ namespace r2 {
 
 		protected:
 			untyped_dynamic_pod_array m_values;
-			munordered_map<K, size_t> m_offsets;
+			unordered_map<K, size_t> m_offsets;
 	};
-	
+
 	template <typename T>
 	class dynamic_pod_array {
 		public:
-			dynamic_pod_array() : m_count(0), m_capacity(16), m_data(new T[16]) {
+			dynamic_pod_array(memory_allocator* allocator = nullptr) : m_allocator(allocator), m_count(0), m_capacity(16), m_data(allocator ? (T*)allocator->allocate(sizeof(T) * 16) : new T[16]) {
 			}
 
-			dynamic_pod_array(size_t count) : m_count(count), m_capacity(count), m_data(new T[count]) {
+			dynamic_pod_array(size_t count, memory_allocator* allocator = nullptr) : m_allocator(allocator), m_count(count), m_capacity(count), m_data(allocator ? (T*)allocator->allocate(sizeof(T) * count) : new T[count]) {
 			}
 
 			~dynamic_pod_array() {
-				delete [] m_data;
+				if (m_allocator) m_allocator->deallocate(m_data);
+				else delete [] m_data;
 				m_data = nullptr;
 			}
 
@@ -225,7 +235,8 @@ namespace r2 {
 
 			void push(const T& value) {
 				if (m_count == m_capacity) {
-					m_data = (T*)r2realloc(m_data, m_capacity * 2 * sizeof(T));
+					if (m_allocator) m_data = (T*)m_allocator->reallocate(m_data, m_capacity * 2 * sizeof(T));
+					else m_data = (T*)r2realloc(m_data, m_capacity * 2 * sizeof(T));
 					m_capacity *= 2;
 				}
 
@@ -236,7 +247,8 @@ namespace r2 {
 			template <typename ... construction_args>
 			void construct(construction_args ... args) {
 				if (m_count == m_capacity) {
-					m_data = (T*)r2realloc(m_data, m_capacity * 2 * sizeof(T));
+					if (m_allocator) m_data = (T*)m_allocator->reallocate(m_data, m_capacity * 2 * sizeof(T));
+					else m_data = (T*)r2realloc(m_data, m_capacity * 2 * sizeof(T));
 					m_capacity *= 2;
 				}
 
@@ -249,7 +261,8 @@ namespace r2 {
 				if (index == m_count) {
 					if (m_count < m_capacity / 2 && m_capacity > 16) {
 						m_capacity /= 2;
-						m_data = (T*)r2realloc(m_data, m_capacity * sizeof(T));
+						if (m_allocator) m_data = (T*)m_allocator->reallocate(m_data, m_capacity * sizeof(T));
+						else m_data = (T*)r2realloc(m_data, m_capacity * sizeof(T));
 					}
 					return;
 				}
@@ -261,7 +274,8 @@ namespace r2 {
 
 				if (m_count < m_capacity / 2 && m_capacity > 16) {
 					m_capacity /= 2;
-					m_data = (T*)r2realloc(m_data, m_capacity * sizeof(T));
+					if (m_allocator) m_data = (T*)m_allocator->reallocate(m_data, m_capacity * sizeof(T));
+					else m_data = (T*)r2realloc(m_data, m_capacity * sizeof(T));
 				}
 			}
 
@@ -289,18 +303,20 @@ namespace r2 {
 
 			inline T* at(size_t index) { return &m_data[index]; }
 			inline T* operator[](size_t index) { return &m_data[index]; }
-			
+
 			void clear() {
 				m_count = 0;
 				if (m_capacity != 16) {
 					m_capacity = 16;
-					r2realloc(m_data, sizeof(T) * 16);
+					if (m_allocator) m_data = (T*)m_allocator->reallocate(m_data, m_capacity * sizeof(T));
+					else m_data = (T*)r2realloc(m_data, m_capacity * sizeof(T));
 				}
 			}
 
 			inline size_t size() const { return m_count; }
 
 		protected:
+			memory_allocator* m_allocator;
 			T* m_data;
 			size_t m_count;
 			size_t m_capacity;
@@ -362,8 +378,8 @@ namespace r2 {
 				m_offsets.clear();
 			}
 
-			mvector<K> keys() const {
-				mvector<K> keys;
+			vector<K> keys() const {
+				vector<K> keys;
 				for(auto& key : m_offsets) {
 					keys.push_back(key.first);
 				}
@@ -372,6 +388,6 @@ namespace r2 {
 
 		protected:
 			dynamic_pod_array<T> m_values;
-			munordered_map<K, size_t> m_offsets;
+			unordered_map<K, size_t> m_offsets;
 	};
 };

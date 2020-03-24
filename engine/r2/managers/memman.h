@@ -6,13 +6,19 @@
 #include <unordered_map>
 #include <list>
 #include <stdio.h>
+#include <r2/utilities/robin_hood.h>
+#include <r2/utilities/timer.h>
+#include <r2/utilities/dynamic_array.hpp>
 
 namespace r2 {
 	#define KBtoB(s) (s * 1024)
 	#define MBtoB(s) (s * 1048576)
 	#define GBtoB(s) (s * 1073741824)
 
+	#define FREE_POOL_COUNT 24
+
 	class memory_man;
+	class memory_allocator;
 
 	typedef u8 allocator_id;
 
@@ -27,6 +33,22 @@ namespace r2 {
 		free_list* next;
 	};
 
+	struct free_pool_stats {
+		size_t count;
+		size_t size;
+		size_t min_block_size;
+		size_t max_block_size;
+	};
+
+	struct frequency_track {
+		frequency_track(memory_allocator* allocator);
+
+		u32 count;
+		f32 allocs_per_second;
+		timer last_alloc_timer;
+		dynamic_pod_array<memory_block*> free_blocks;
+	};
+
 	class memory_allocator {
 		public:
 			memory_allocator(size_t max_size, size_t max_free_pool_size = 0);
@@ -36,6 +58,8 @@ namespace r2 {
 			void* reallocate(void* ptr, size_t size);
 			bool deallocate(void* ptr);
 			void deallocate_all();
+			void enable_memory_tracking();
+			void disable_memory_tracking();
 
 			void merge_adjacent_blocks();
 
@@ -45,10 +69,13 @@ namespace r2 {
 			size_t size() const { return m_size; }
 			size_t used() const { return m_used; }
 
+			void slow_check();
+
 		protected:
 			friend class memory_man;
 			memory_allocator();
 			void deallocate_from_self(void* ptr);
+			void deallocate_block(memory_block* block);
 			bool deallocate_called_from_other_allocator(memory_block* block, void* ptr, allocator_id otherAllocatorId);
 			void* reallocate_from_self(void* ptr, size_t size);
 			void* reallocate_called_from_other_allocator(memory_block* block, void* ptr, size_t size, allocator_id otherAllocatorId);
@@ -57,6 +84,8 @@ namespace r2 {
 			free_list* get_empty_free_list_node();
 			bool add_to_free_list(memory_block* block);
 			void* get_free_list_node(size_t size);
+			memory_block* block(size_t idx);
+			void purge_unused_tracked_blocks();
 
 
 			void* m_base;
@@ -68,11 +97,16 @@ namespace r2 {
 			memory_allocator* m_next;
 			memory_allocator* m_last;
 			memory_block* m_baseBlock;
-			// 8, 16, 32, 64, 128, 256
 			void* m_freePoolMem;
 			free_list m_emptyFreePools;
-			free_list m_freePools[6];
+			free_list m_freePools[FREE_POOL_COUNT];
+			free_pool_stats m_freePoolStats[FREE_POOL_COUNT];
+			size_t m_used_pool_count;
 			size_t m_size_in_free_pools;
+			size_t m_size_in_tracked_pools;
+			bool m_tracking_enabled;
+			timer m_clean_tracked_timer;
+			robin_hood::unordered_map<size_t, frequency_track> m_allocTrackers;
 	};
 
 	class memory_man {
@@ -115,6 +149,7 @@ namespace r2 {
 	};
 
 	void* r2alloc(size_t sz);
+	void* r2calloc(size_t count, size_t size);
 	void* r2realloc(void* ptr, size_t sz);
 	void r2free(void* ptr);
 

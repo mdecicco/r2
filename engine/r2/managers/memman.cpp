@@ -3,6 +3,7 @@
 
 namespace r2 {
 	static bool use_malloc = false;
+	static bool log_alloc_sizes = false;
 	FILE* tfp = nullptr;
 
 	memory_block* blockFromPtr(void *data) {
@@ -30,12 +31,50 @@ namespace r2 {
 	}
 
 
+	size_t init_pools(free_pool_stats* stats) {
+		size_t c = 0;
+		return c;
+		stats[c++] = { 0, 0,     8,    15 };
+		stats[c++] = { 0, 0,    16,    23 };
+		stats[c++] = { 0, 0,    24,    31 };
+		stats[c++] = { 0, 0,    32,    47 };
+		stats[c++] = { 0, 0,    48,    63 };
+		stats[c++] = { 0, 0,    64,   127 };
+		stats[c++] = { 0, 0,   128,   255 };
+		stats[c++] = { 0, 0,   256,   511 };
+		stats[c++] = { 0, 0,   512,  1023 };
+		stats[c++] = { 0, 0,  1024,  2047 };
+		stats[c++] = { 0, 0,  2048,  4095 };
+		stats[c++] = { 0, 0,  4096,  8191 };
+		stats[c++] = { 0, 0,  8192, 16384 };
+		return c;
+	}
+
+
 	memory_man* memory_man::instance = nullptr;
+
+	frequency_track::frequency_track(memory_allocator* allocator) : count(0), allocs_per_second(0.0f), free_blocks(allocator) {
+		last_alloc_timer.start();
+	};
+
+
 
 	memory_allocator::memory_allocator() : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(0), m_used(0), m_blockCount(0), m_baseBlock(nullptr) {
 		m_id = 1;
 		m_mergeCounter = 50;
 		m_size_in_free_pools = 0;
+		m_size_in_tracked_pools = 0;
+		m_tracking_enabled = true;
+		for (u8 i = 0;i < FREE_POOL_COUNT;i++) {
+			m_freePools[i].block = nullptr;
+			m_freePools[i].next = nullptr;
+			m_freePoolStats[i].count = 0;
+			m_freePoolStats[i].size = 0;
+			m_freePoolStats[i].min_block_size = 0;
+			m_freePoolStats[i].max_block_size = 0;
+		}
+		m_used_pool_count = init_pools(m_freePoolStats);
+		m_clean_tracked_timer.start();
 	}
 
 	memory_allocator::memory_allocator(size_t max_size, size_t max_free_pool_size) : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(max_size), m_used(0), m_blockCount(0) {
@@ -51,6 +90,8 @@ namespace r2 {
 		m_id = m_last->m_id + 1;
 		m_mergeCounter = 50;
 		m_size_in_free_pools = 0;
+		m_size_in_tracked_pools = 0;
+		m_tracking_enabled = true;
 
 		size_t pool_size = max_free_pool_size;
 		if (pool_size == 0) pool_size = max_size * 0.1;
@@ -66,10 +107,18 @@ namespace r2 {
 			nodes[i].block = nullptr;
 			nodes[i].next = i < free_list_count - 1 ? &nodes[i + 1] : nullptr;
 		}
-		for (u8 i = 0;i < 6;i++) {
+
+		for (u8 i = 0;i < FREE_POOL_COUNT;i++) {
 			m_freePools[i].block = nullptr;
 			m_freePools[i].next = nullptr;
+			m_freePoolStats[i].count = 0;
+			m_freePoolStats[i].size = 0;
+			m_freePoolStats[i].min_block_size = 0;
+			m_freePoolStats[i].max_block_size = 0;
 		}
+
+		m_used_pool_count = init_pools(m_freePoolStats);
+		m_clean_tracked_timer.start();
 	}
 
 	memory_allocator::~memory_allocator() {
@@ -83,31 +132,33 @@ namespace r2 {
 	}
 
 	void* memory_allocator::allocate(size_t size) {
-		//if (tfp) fprintf(tfp, "%llu,", size);
 		if (use_malloc) return malloc(size);
 
 		// check if there is a free block that fits this size
 		void* mem = get_free_list_node(size);
 		if (mem) return mem;
 
-		if (size > m_size - m_used) {
+		memory_block* block = find_available(size);
+		if (!block && size > m_size - m_used) {
 			if (m_id == 1) printf("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
 			else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
 
 			exit(-1);
 			return nullptr;
 		}
-		memory_block* block = find_available(size);
 
 		assert(block != nullptr);
 
 		block->used = m_id;
 		m_used += size;
+
+		purge_unused_tracked_blocks();
 		return ptrFromBlock(block);
 	}
 
 	void* memory_allocator::reallocate(void* ptr, size_t size) {
 		if (use_malloc) return realloc(ptr, size);
+
 		memory_block* block = blockFromPtr(ptr);
 		if (block->size == size) return ptr;
 		if (block->used == m_id) {
@@ -168,6 +219,14 @@ namespace r2 {
 		m_blockCount = 1;
 		m_mergeCounter = 50;
 		memset(ptrFromBlock(m_baseBlock), 0xFC, m_baseBlock->size);
+	}
+
+	void memory_allocator::enable_memory_tracking() {
+		m_tracking_enabled = true;
+	}
+
+	void memory_allocator::disable_memory_tracking() {
+		m_tracking_enabled = false;
 	}
 
 	void memory_allocator::merge_adjacent_blocks() {
@@ -252,7 +311,31 @@ namespace r2 {
 		assert(block->used == m_id);
 
 		if (add_to_free_list(block)) return;
+		
+		if (m_tracking_enabled) {
+			auto it = m_allocTrackers.find(block->size);
+			if (it != m_allocTrackers.end()) {
+				frequency_track& track = it->second;
+				if (track.allocs_per_second > 20) {
+					track.free_blocks.push(block);
+					m_size_in_tracked_pools += block->size;
+					return;
+				}
+			}
+		}
 
+		deallocate_block(block);
+
+		// can't merge backwards here because of the lack of memory_block::last,
+		// merge forward from the beginning instead every so often
+
+		m_mergeCounter--;
+		if (m_mergeCounter == 0) merge_adjacent_blocks();
+
+		purge_unused_tracked_blocks();
+	}
+
+	void memory_allocator::deallocate_block(memory_block* block) {
 		block->used = false;
 		m_used -= block->size;
 
@@ -264,12 +347,6 @@ namespace r2 {
 			m_used -= sizeof(memory_block);
 			m_blockCount--;
 		}
-
-		// can't merge backwards here because of the lack of memory_block::last,
-		// merge forward from the beginning instead every so often
-
-		m_mergeCounter--;
-		if (m_mergeCounter == 0) merge_adjacent_blocks();
 	}
 
 	bool memory_allocator::deallocate_called_from_other_allocator(memory_block* block, void* ptr, allocator_id otherAllocatorId) {
@@ -394,6 +471,35 @@ namespace r2 {
 	}
 
 	memory_block* memory_allocator::find_available(size_t size) {
+		if (m_tracking_enabled && size > m_freePoolStats[m_used_pool_count - 1].max_block_size) {
+			auto it = m_allocTrackers.find(size);
+			if (it != m_allocTrackers.end()) {
+				frequency_track& track = it->second;
+				track.count++;
+				f32 elapsed = track.last_alloc_timer;
+				if (elapsed >= 1.0f) {
+					track.last_alloc_timer.reset();
+					track.last_alloc_timer.start();
+					track.allocs_per_second = f32(track.count) / elapsed;
+					track.count = 0;
+				}
+
+				size_t free_count = track.free_blocks.size();
+				if (free_count > 0) {
+					memory_block* block = *track.free_blocks[free_count - 1];
+					track.free_blocks.remove(free_count - 1);
+					m_size_in_tracked_pools -= block->size;
+					return block;
+				}
+			} else {
+				m_tracking_enabled = false;
+				m_allocTrackers.emplace(size, this);
+				m_tracking_enabled = true;
+			}
+		}
+
+		if (tfp) fprintf(tfp, "%llu,", size);
+
 		memory_block* b = m_baseBlock;
 		while(b) {
 			if (b->size > size + sizeof(memory_block) && !b->used) {
@@ -430,42 +536,49 @@ namespace r2 {
 
 	free_list* memory_allocator::get_empty_free_list_node() {
 		if (!m_emptyFreePools.next) return nullptr;
+
 		free_list* next = m_emptyFreePools.next;
 		m_emptyFreePools.next = next->next;
+
 		return next;
 	}
 
 	bool memory_allocator::add_to_free_list(memory_block* block) {
-		size_t psz = 8;
-		u8 pidx = 0;
-		for (u8 i = 0;i < 6;i++) {
-			if (block->size >= psz && block->size < psz * 2) break;
-			pidx++;
-			psz *= 2;
+		if ((m_size_in_free_pools + block->size) > (m_size / 4)) {
+			return false;
 		}
-		if (pidx < 6) {
+
+		u8 pidx = 0;
+		for (u8 i = 0;i < m_used_pool_count;i++) {
+			if (block->size >= m_freePoolStats[i].min_block_size && block->size < m_freePoolStats[i].max_block_size) break;
+			pidx++;
+		}
+
+		if (pidx < m_used_pool_count) {
 			// this block can fit in a free pool
 			free_list* node = get_empty_free_list_node();
 			if (node) {
 				node->block = block;
 				node->next = m_freePools[pidx].next;
 				m_freePools[pidx].next = node;
+				m_freePoolStats[pidx].count++;
+				m_freePoolStats[pidx].size += block->size;
 				m_size_in_free_pools += block->size;
+
 				return true;
 			}
 		}
+
 		return false;
 	}
 
 	void* memory_allocator::get_free_list_node(size_t size) {
-		u16 sz = 8;
 		u8 pidx = 0;
-		for (u8 i = 0;i < 6;i++) {
-			if (size <= sz) break;
+		for (u8 i = 0;i < m_used_pool_count;i++) {
+			if (size <= m_freePoolStats[i].min_block_size) break;
 			pidx++;
-			sz *= 2;
 		}
-		if (pidx == 6) return nullptr;
+		if (pidx == m_used_pool_count) return nullptr;
 
 		free_list* pool = m_freePools[pidx].next;
 		if (!pool) return nullptr;
@@ -482,9 +595,55 @@ namespace r2 {
 		m_emptyFreePools.next = pool;
 
 		m_size_in_free_pools -= block->size;
+		m_freePoolStats[pidx].count--;
+		m_freePoolStats[pidx].size -= block->size;
 
 		return ptrFromBlock(block);
 	}
+
+	memory_block* memory_allocator::block(size_t idx) {
+		size_t i = 0;
+		memory_block* b = m_baseBlock;
+		while(b && i <= idx) {
+			b = b->next;
+			i++;
+		}
+		return b;
+	}
+
+	void memory_allocator::purge_unused_tracked_blocks() {
+		if (m_clean_tracked_timer.elapsed() < 10.0f) return;
+		m_clean_tracked_timer.reset();
+		m_clean_tracked_timer.start();
+
+
+		printf("purging unused blocks: %s -> ", format_size(m_size_in_tracked_pools));
+		for (auto& i = m_allocTrackers.begin();i != m_allocTrackers.end();++i) {
+			frequency_track& track = i->second;
+			if (track.free_blocks.size() > 0 && track.last_alloc_timer.elapsed() > 10.0f) {
+				track.free_blocks.for_each([this](memory_block** block) {
+					this->deallocate_block(*block);
+					this->m_size_in_tracked_pools -= (*block)->size;
+					return true;
+				});
+				track.free_blocks.clear();
+				track.allocs_per_second = 0;
+				track.count = 0;
+			}
+		}
+		printf("%s\n", format_size(m_size_in_tracked_pools));
+	}
+
+	void memory_allocator::slow_check() {
+		memory_block* b = m_baseBlock;
+		size_t i = 0;
+		while(b) {
+			assert(checkSize(b));
+			b = b->next;
+			i++;
+		}
+	}
+
 
 
 	memory_man* memory_man::get() {
@@ -496,8 +655,11 @@ namespace r2 {
 	}
 
 	memory_man::memory_man() {
-		//tfp = fopen("memstat.txt", "w");
-		//if (!tfp) printf("Failed to create memstat.txt");
+		if (log_alloc_sizes) {
+			tfp = fopen("memstat.txt", "w");
+			if (!tfp) printf("Failed to create memstat.txt");
+		}
+
 		FILE* fp = fopen("mem.ini", "rb");
 		if (!fp) {
 			printf("No mem.ini found. Creating one, maximum memory usage by this application is now 32 MB. Take that.\n");
@@ -561,10 +723,6 @@ namespace r2 {
 			nodes[i].block = nullptr;
 			nodes[i].next = i < free_list_count - 1 ? &nodes[i + 1] : nullptr;
 		}
-		for (u8 i = 0;i < 6;i++) {
-			m_baseAllocator.m_freePools[i].block = nullptr;
-			m_baseAllocator.m_freePools[i].next = nullptr;
-		}
 
 		m_allocatorStack = (allocator_stack*)m_baseAllocator.allocate(sizeof(allocator_stack));
 		m_allocatorStack->last = nullptr;
@@ -573,7 +731,7 @@ namespace r2 {
 	}
 
 	memory_man::~memory_man() {
-		fclose(tfp);
+		if (tfp) fclose(tfp);
 		free(m_base);
 		free(m_baseAllocator.m_freePoolMem);
 	}
@@ -639,8 +797,6 @@ namespace r2 {
 	}
 
 	void memory_man::deallocate(void* ptr) {
-		// will traverse the allocator list in both directions until the allocator that allocated this data is found
-		// starts at current allocator, since that's probably the most common case
 		memory_man::get()->m_allocatorStack->allocator->deallocate(ptr);
 	}
 
@@ -668,6 +824,12 @@ namespace r2 {
 		//printf("r2alloc(%d:%d): 0x%X\n", sz, align(sz), (u64)ret);
 		//return ret;
 		return memory_man::allocate(align(sz));
+	}
+
+	void* r2calloc(size_t count, size_t size) {
+		void* d = r2alloc(count * size);
+		memset(d, 0, count * size);
+		return d;
 	}
 
 	void* r2realloc(void* ptr, size_t sz) {
