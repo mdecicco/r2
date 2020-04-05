@@ -31,9 +31,13 @@ namespace r2 {
 	}
 
 
+	// replaced by active allocation tracking and storage of blocks
+	// of specific (recently frequently allocated) sizes
+	// this may still be useful later
 	size_t init_pools(free_pool_stats* stats) {
 		size_t c = 0;
 		return c;
+		// block count, bytes in pool, min block size, max block size
 		stats[c++] = { 0, 0,     8,    15 };
 		stats[c++] = { 0, 0,    16,    23 };
 		stats[c++] = { 0, 0,    24,    31 };
