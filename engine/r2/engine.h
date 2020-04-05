@@ -20,6 +20,7 @@
 #include <r2/utilities/window.h>
 
 namespace r2 {
+	class scripted_sys;
 	class state_entities : public engine_state_data {
 		public:
 			state_entities();
@@ -41,6 +42,7 @@ namespace r2 {
     class r2engine : public event_receiver {
         public:
 			static void register_system(entity_system* system);
+			static void register_scripted_system(scripted_sys* system);
 			static void entity_created(scene_entity* entity);
 			static void entity_destroyed(scene_entity* entity);
 			static void create(int argc, char** argv);
@@ -95,6 +97,7 @@ namespace r2 {
 			static r2engine* instance;
 			static log_man* logMgr;
 			static mvector<entity_system*> systems;
+			static mvector<scripted_sys*> scripted_systems;
 
 			mvector<engine_state_data*> m_globalStateData;
 			engine_state_data_ref<state_entities> m_entities;

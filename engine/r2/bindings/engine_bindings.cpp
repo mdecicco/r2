@@ -2,6 +2,7 @@
 #include <v8pp/class.hpp>
 #include <v8pp/json.hpp>
 #include <v8pp/convert.hpp>
+#include <r2/systems/scripted_sys.h>
 
 using namespace v8;
 namespace v8pp {
@@ -194,6 +195,10 @@ namespace r2 {
 		r2engine::get()->dispatchAtFrameStart(&e);
 	}
 
+	void register_system(scripted_sys* system) {
+		r2engine::register_scripted_system(system);
+	}
+
 	f32 fps() {
 		return r2engine::get()->fps();
 	}
@@ -241,6 +246,13 @@ namespace r2 {
 			m.set("Entity", s);
 		}
 
+		{
+			class_<scripted_sys, v8pp::raw_ptr_traits> s(isolate);
+			s.ctor<v8Args>();
+			register_class_state(s);
+			m.set("System", s);
+		}
+
 		m.set("log", &log);
 		m.set("warn", &warn);
 		m.set("error", &error);
@@ -250,6 +262,7 @@ namespace r2 {
 		m.set("window_size", &window_size);
 		m.set("register_state", &register_state);
 		m.set("activate_state", &activate_state);
+		m.set("register_system", &register_system);
 		m.set("frame_rate", &fps);
 
 		module mem(isolate);

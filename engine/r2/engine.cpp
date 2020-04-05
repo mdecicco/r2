@@ -5,6 +5,7 @@ namespace r2 {
 	r2engine* r2engine::instance = nullptr;
 	log_man* r2engine::logMgr = nullptr;
 	mvector<entity_system*> r2engine::systems = mvector<entity_system*>();
+	mvector<scripted_sys*> r2engine::scripted_systems = mvector<scripted_sys*>();
 
 	state_entities::state_entities() {
 		uninitializedEntities = new mvector<scene_entity*>();
@@ -25,8 +26,24 @@ namespace r2 {
 		r2engine::systems.push_back(system);
 	}
 
+	void r2engine::register_scripted_system(scripted_sys* system) {
+		if (instance->m_stateMgr->m_states.size() > 0) {
+			r2Error("Systems should be registered before any states are created");
+			return;
+		}
+
+		r2engine::scripted_systems.push_back(system);
+		system->_initialize();
+		instance->add_child(system);
+		system->scriptedState = instance->m_stateMgr->register_state_data_factory<scripted_system_state>(system->factory);
+		instance->m_globalStateData.push_back(system->factory->create());
+	}
+
 	void r2engine::entity_created(scene_entity* entity) {
 		for(entity_system* sys : r2engine::systems) {
+			sys->_entity_added(entity);
+		}
+		for(entity_system* sys : r2engine::scripted_systems) {
 			sys->_entity_added(entity);
 		}
 
@@ -38,6 +55,9 @@ namespace r2 {
 
 	void r2engine::entity_destroyed(scene_entity* entity) {
 		for(entity_system* sys : r2engine::systems) {
+			sys->_entity_removed(entity);
+		}
+		for(entity_system* sys : r2engine::scripted_systems) {
 			sys->_entity_removed(entity);
 		}
 
@@ -70,15 +90,10 @@ namespace r2 {
 	void r2engine::create(int argc, char** argv) {
 		if (instance) return;
 
-		memory_man::current()->slow_check();
 		r2engine::register_system(transform_sys::get());
-		memory_man::current()->slow_check();
 		r2engine::register_system(camera_sys::get());
-		memory_man::current()->slow_check();
 		r2engine::register_system(mesh_sys::get());
-		memory_man::current()->slow_check();
 		r2engine::register_system(physics_sys::get());
-		memory_man::current()->slow_check();
 
 		logMgr = new log_man();
 		instance = new r2engine(argc, argv);
@@ -147,6 +162,11 @@ namespace r2 {
 			system->_deinitialize();
 			remove_child(system);
 			delete system;
+		}
+		for(entity_system* sys : r2engine::scripted_systems) {
+			sys->_deinitialize();
+			remove_child(sys);
+			// should be deleted by the v8 garbage collector
 		}
 
 		if (m_inputMgr) {
@@ -255,6 +275,7 @@ namespace r2 {
 	void r2engine::initialize_new_entities() {
 		m_entities.enable();
 		for(entity_system* sys : r2engine::systems) sys->initialize_entities();
+		for(entity_system* sys : r2engine::scripted_systems) sys->initialize_entities();
 
 		auto& uninitializedEntities = *m_entities->uninitializedEntities;
 		auto& entities = m_entities->entities;
@@ -311,6 +332,7 @@ namespace r2 {
 			if (currentState) currentState->update(dt);
 
 			for(entity_system* sys : r2engine::systems) sys->tick(dt);
+			for(entity_system* sys : r2engine::scripted_systems) sys->tick(dt);
 
 			//timer t;
 			//t.start();
