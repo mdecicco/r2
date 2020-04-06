@@ -55,8 +55,7 @@ namespace r2 {
 			return;
 		} else m_compClass.Reset(isolate, LocalFunctionHandle::Cast(compClass));
 
-
-		string name = convert<string>::from_v8(isolate, args[2]);
+		name = convert<string>::from_v8(isolate, args[2]);
 
 		LocalValueHandle value = self->Get(v8str("bind"));
 		if (!value->IsUndefined() && !value->IsFunction()) {
@@ -115,7 +114,7 @@ namespace r2 {
 	scene_entity_component* scripted_sys::create_component(entityId id) {
 		auto s = state();
 		s.enable();
-		auto out = s->create<scripted_component>(id);
+		auto out = s->create<scripted_component>(id, spawn_component_data());
 		s.disable();
 		return out;
 	}
@@ -165,14 +164,16 @@ namespace r2 {
 	LocalObjectHandle scripted_sys::spawn_state_data() {
 		Isolate* isolate = r2engine::scripts()->context()->isolate();
 		LocalFunctionHandle constructor = m_stateClass.Get(isolate);
-		LocalValueHandle result = constructor->CallAsConstructor(isolate->GetCurrentContext(), 0, nullptr).FromMaybe(Undefined(isolate));
+		Local<Value> result;
+		constructor->CallAsConstructor(isolate->GetCurrentContext(), 0, nullptr).ToLocal(&result);
 		return LocalObjectHandle::Cast(result);
 	}
 
 	LocalObjectHandle scripted_sys::spawn_component_data() {
 		Isolate* isolate = r2engine::scripts()->context()->isolate();
 		LocalFunctionHandle constructor = m_compClass.Get(isolate);
-		LocalValueHandle result = constructor->CallAsConstructor(isolate->GetCurrentContext(), 0, nullptr).FromMaybe(Undefined(isolate));
+		Local<Value> result;
+		constructor->CallAsConstructor(isolate->GetCurrentContext(), 0, nullptr).ToLocal(&result);
 		return LocalObjectHandle::Cast(result);
 	}
 };

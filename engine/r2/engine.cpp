@@ -1,4 +1,5 @@
 #include <r2/engine.h>
+#include <r2/systems/scripted_sys.h>
 #include <stdio.h>
 
 namespace r2 {
