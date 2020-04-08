@@ -155,6 +155,8 @@ namespace r2 {
 			void destroy();
 			void add_child_entity(scene_entity* entity);
 			void remove_child_entity(scene_entity* entity);
+			void add_custom_component(const mstring& systemName);
+			void remove_custom_component(const mstring& systemName);
 			mvector<scene_entity*> children();
 			
 			template <typename F>

@@ -237,18 +237,24 @@ namespace r2 {
 			s.ctor<v8Args>();
 			register_class_state(s);
 			s.set("id", property(&scene_entity::id));
+			s.set("name", property(&scene_entity::name));
 			s.set("destroy", &scene_entity::destroy);
 			s.set("set_update_frequency", &scene_entity::setUpdateFrequency);
 			s.set("add_child", &scene_entity::add_child_entity);
 			s.set("remove_child", &scene_entity::remove_child_entity);
 			s.set("subscribe", &scene_entity::subscribe);
 			s.set("unsubscribe", &scene_entity::unsubscribe);
+			s.set("add_component", &scene_entity::add_custom_component);
+			s.set("remove_component", &scene_entity::remove_custom_component);
 			m.set("Entity", s);
 		}
 
 		{
 			class_<scripted_sys, v8pp::raw_ptr_traits> s(isolate);
 			s.ctor<v8Args>();
+			s.set("set_update_frequency", &scripted_sys::setUpdateFrequency);
+			s.set("get_average_update_duration", &scripted_sys::getAverageUpdateDuration);
+			s.set("query_components", &scripted_sys::queryComponents);
 			register_class_state(s);
 			m.set("System", s);
 		}

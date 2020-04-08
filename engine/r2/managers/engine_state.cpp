@@ -30,4 +30,7 @@ namespace r2 {
 		if (!current || current == TEMP_STATE_REF__ENGINE) return r2engine::get()->get_engine_state_data(factoryIdx);
 		return current->get_engine_state_data(factoryIdx);
 	}
+	engine_state_data_factory* __get_state_factory(u16 factoryIdx) {
+		return r2engine::states()->factory(factoryIdx);
+	}
 };

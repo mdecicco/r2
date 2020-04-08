@@ -5,6 +5,7 @@
 
 namespace r2 {
 	class engine_state_data;
+	class engine_state_data_factory;
 	class state;
 
 	// Used by template functions
@@ -12,6 +13,7 @@ namespace r2 {
 	void __enable_state_mem();
 	void __disable_state_mem();
 	engine_state_data* __get_state_data(u16 factoryIdx);
+	engine_state_data_factory* __get_state_factory(u16 factoryIdx);
 
 	class engine_state_data {
 		public:
@@ -64,6 +66,9 @@ namespace r2 {
 				assert(m_valid);
 				assert(m_enabled > 0);
 				return (T*)__get_state_data(m_factoryIdx);
+			}
+			engine_state_data_factory* factory() const {
+				return __get_state_factory(m_factoryIdx);
 			}
 
 		protected:

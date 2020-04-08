@@ -1,4 +1,5 @@
 #include <r2/systems/entity.h>
+#include <r2/systems/scripted_sys.h>
 #include <r2/engine.h>
 
 using namespace v8;
@@ -109,7 +110,10 @@ namespace r2 {
 		} else if (!maybeFunc->IsUndefined()) {
 			if (function == "update") m_doesUpdate = true;
 			(*m_scriptFuncs)[function].Reset(isolate, LocalFunctionHandle::Cast(maybeFunc));
+			return true;
 		}
+
+		return false;
 	}
 
 	bool scene_entity::bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args)) {
@@ -256,7 +260,7 @@ namespace r2 {
 		bind("handleEvent");
 		bind("update");
 		bind("willBeDestroyed");
-		if(bind("wasInitialized")) call("wasInitialized");
+		if (bind("wasInitialized")) call("wasInitialized");
 	}
 
 	void scene_entity::updatesStarted() {
@@ -346,6 +350,16 @@ namespace r2 {
 		entity->m_parent = nullptr;
 		remove_child(entity);
 		r2engine::get()->add_child(entity);
+	}
+
+	void scene_entity::add_custom_component(const mstring& systemName) {
+		scripted_sys* sys = r2engine::scripted_system(systemName);
+		sys->addComponentTo(this);
+	}
+
+	void scene_entity::remove_custom_component(const mstring& systemName) {
+		scripted_sys* sys = r2engine::scripted_system(systemName);
+		sys->removeComponentFrom(this);
 	}
 
 	mvector<scene_entity*> scene_entity::children() {

@@ -61,6 +61,7 @@ namespace r2 {
 			static input_man* input() { return instance->m_inputMgr; }
 			static audio_man* audio() { return instance->m_audioMgr; }
 			static log_man* logs() { return logMgr; }
+			static scripted_sys* scripted_system(const mstring& systemName);
 
 			static r2::window* window() { return &instance->m_window; }
 			static engine_state_data* get_engine_state_data(u16 factoryIdx) { return instance->m_globalStateData[factoryIdx]; }

@@ -14,14 +14,27 @@ namespace r2 {
 		//m_mouse = (OIS::Mouse*)m_im->createInputObject(OIS::OISMouse, true);
 		//m_mouse->setEventCallback(this);
 
+		u8 joystick_count = m_im->getNumberOfDevices(OIS::OISJoyStick);
+		for (u8 i = 0;i < joystick_count;i++) {
+			OIS::JoyStick* js = (OIS::JoyStick*)m_im->createInputObject(OIS::OISJoyStick, true);
+			js->setEventCallback(this);
+			m_joysticks.push_back(js);
+		}
+
+		/*
+
+		For some dumb ass reason this causes 5 memory leaks (according to the memory manager...)
+		
 		OIS::DeviceList l = m_im->listFreeDevices();
-		for(auto device : l) {
-			if (device.first == OIS::OISJoyStick) {
-				OIS::JoyStick* js = (OIS::JoyStick*)m_im->createInputObject(OIS::OISJoyStick, true, device.second);
+		for (auto& it = l.begin();it != l.end();it++) {
+			if (it->first == OIS::OISJoyStick) {
+				OIS::JoyStick* js = (OIS::JoyStick*)m_im->createInputObject(OIS::OISJoyStick, true, it->second);
 				js->setEventCallback(this);
 				m_joysticks.push_back(js);
 			}
 		}
+
+		*/
 	}
 	input_man::~input_man() {
 		m_keyboard->setEventCallback(nullptr);

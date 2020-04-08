@@ -35,7 +35,14 @@ namespace r2 {
 
 		r2engine::scripted_systems.push_back(system);
 		system->_initialize();
+
+		// add system as event listener
 		instance->add_child(system);
+
+		// initialize global state data
+		instance->m_globalStateData.push_back(system->state().factory()->create());
+
+		// initialize system's custom global state data
 		system->scriptedState = instance->m_stateMgr->register_state_data_factory<scripted_system_state>(system->factory);
 		instance->m_globalStateData.push_back(system->factory->create());
 	}
@@ -107,6 +114,8 @@ namespace r2 {
 
 		for(entity_system* sys : r2engine::systems) {
 			sys->_initialize();
+
+			// add system as event listener
 			instance->add_child(sys);
 		}
 
@@ -119,6 +128,14 @@ namespace r2 {
 		instance->scripts()->executeFile("./builtin.js");
 	}
 
+	scripted_sys* r2engine::scripted_system(const mstring& systemName) {
+		for (scripted_sys* sys : instance->scripted_systems) {
+			if (sys->name == systemName) return sys;
+		}
+
+		r2Error("No system with the name '%s' exists", systemName.c_str());
+		return nullptr;
+	}
 
 
     r2engine::r2engine(int argc,char** argv) : m_platform(v8::platform::NewDefaultPlatform()) {

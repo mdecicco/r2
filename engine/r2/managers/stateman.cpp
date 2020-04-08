@@ -435,6 +435,9 @@ namespace r2 {
 
 		return NULL;
 	}
+	engine_state_data_factory* state_man::factory(u16 factoryIdx) {
+		return m_engineStateDataFactories[factoryIdx];
+	}
 
 	void state_man::initialize_state_engine_data(state* s) {
 		for(auto factory : m_engineStateDataFactories) {

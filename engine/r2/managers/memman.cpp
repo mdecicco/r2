@@ -139,10 +139,10 @@ namespace r2 {
 		if (use_malloc) return malloc(size);
 
 		// check if there is a free block that fits this size
-		void* mem = get_free_list_node(size);
+		void* mem = get_free_list_node(align(size));
 		if (mem) return mem;
 
-		memory_block* block = find_available(size);
+		memory_block* block = find_available(align(size));
 		if (!block && size > m_size - m_used) {
 			if (m_id == 1) printf("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
 			else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
@@ -154,7 +154,7 @@ namespace r2 {
 		assert(block != nullptr);
 
 		block->used = m_id;
-		m_used += size;
+		m_used += align(size);
 
 		purge_unused_tracked_blocks();
 		return ptrFromBlock(block);
@@ -388,9 +388,9 @@ namespace r2 {
 				size_t oldNextSize = block->next->size;
 				memory_block* blockAfterNext = block->next->next;
 
-				block->size = size;
+				block->size = align(size);
 
-				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
+				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + align(size));
 				nextBlock->next = blockAfterNext;
 				nextBlock->size = oldNextSize - sizeDiff;
 				nextBlock->used = add_to_free_list(nextBlock);
@@ -413,9 +413,9 @@ namespace r2 {
 				size_t oldNextSize = block->next->size;
 				memory_block* blockAfterNext = block->next->next;
 
-				block->size = size;
+				block->size = align(size);
 
-				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
+				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + align(size));
 				nextBlock->next = blockAfterNext;
 				nextBlock->size = oldNextSize + sizeDiff;
 				nextBlock->used = add_to_free_list(nextBlock);
@@ -428,9 +428,9 @@ namespace r2 {
 
 				memory_block* oldNextBlock = block->next;
 
-				block->size = size;
+				block->size = align(size);
 
-				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + size);
+				memory_block* nextBlock = (memory_block*)(((u8*)ptr) + align(size));
 				nextBlock->next = oldNextBlock;
 				nextBlock->size = sizeDiff - sizeof(memory_block);
 				nextBlock->used = add_to_free_list(nextBlock);
@@ -824,10 +824,7 @@ namespace r2 {
 	}
 
 	void* r2alloc(size_t sz) {
-		//void* ret = memory_man::get()->allocate(align(sz));
-		//printf("r2alloc(%d:%d): 0x%X\n", sz, align(sz), (u64)ret);
-		//return ret;
-		return memory_man::allocate(align(sz));
+		return memory_man::allocate(sz);
 	}
 
 	void* r2calloc(size_t count, size_t size) {
@@ -840,7 +837,7 @@ namespace r2 {
 		//void* ret = memory_man::get()->allocate(align(sz));
 		//printf("r2alloc(%d:%d): 0x%X\n", sz, align(sz), (u64)ret);
 		//return ret;
-		return memory_man::reallocate(ptr, align(sz));
+		return memory_man::reallocate(ptr, sz);
 	}
 
 	void r2free(void* ptr) {

@@ -35,7 +35,7 @@ namespace r2 {
 			scripted_sys* system;
 	};
 
-	class scripted_sys : public entity_system {
+	class scripted_sys : public entity_system, public periodic_update {
 		public:
 			scripted_sys(v8Args args);
 			~scripted_sys();
@@ -50,16 +50,21 @@ namespace r2 {
 			virtual void bind(scene_entity_component* component, scene_entity* entity);
 			virtual void unbind(scene_entity* entity);
 			virtual void tick(f32 dt);
+			virtual void doUpdate(f32 frameDt, f32 updateDt);
 			virtual void handle(event* evt);
 
-			LocalObjectHandle spawn_state_data();
-			LocalObjectHandle spawn_component_data();
+			void queryComponents(v8Args args);
 
-			string name;
+			LocalObjectHandle spawn_state_data();
+			LocalObjectHandle spawn_component_data(entityId id);
+
+			mstring name;
 			scripted_system_state_factory* factory;
 			engine_state_data_ref<scripted_system_state> scriptedState;
 
 		protected:
+			mstring m_componentScriptAccessorName;
+			PersistentObjectHandle m_self;
 			PersistentFunctionHandle m_stateClass;
 			PersistentFunctionHandle m_compClass;
 			PersistentFunctionHandle m_bindFunc;
