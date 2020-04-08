@@ -501,6 +501,45 @@ namespace r2 {
 		return buf;
 	}
 
+	void scene::destroy(render_buffer* rbo) {
+		for (auto i = m_targets.begin();i != m_targets.end();i++) {
+			if ((*i) == rbo) {
+				m_targets.erase(i);
+				return;
+			}
+		}
+
+		r2engine::renderer()->driver()->free_render_target(rbo);
+
+		r2Error("scene::destroy was called with a render buffer that doesn't exist within this scene");
+	}
+
+	void scene::destroy(shader_program* program) {
+		for (auto i = m_shaders.begin();i != m_shaders.end();i++) {
+			if ((*i) == program) {
+				m_shaders.erase(i);
+				return;
+			}
+		}
+
+		r2engine::assets()->destroy(program);
+
+		r2Error("scene::destroy was called with a shader program that doesn't exist within this scene");
+	}
+
+	void scene::destroy(texture_buffer* texture) {
+		for (auto i = m_textures.begin();i != m_textures.end();i++) {
+			if ((*i) == texture) {
+				m_textures.erase(i);
+				return;
+			}
+		}
+
+		r2engine::renderer()->driver()->free_texture(texture);
+
+		r2Error("scene::destroy was called with a texture buffer that doesn't exist within this scene");
+	}
+
 	void scene::set_render_target(render_buffer* target) {
 		m_renderTarget = target;
 	}

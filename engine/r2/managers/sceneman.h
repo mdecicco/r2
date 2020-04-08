@@ -235,6 +235,10 @@ namespace r2 {
 			texture_buffer* create_texture();
 			render_buffer* create_render_target();
 
+			void destroy(render_buffer* rbo);
+			void destroy(shader_program* program);
+			void destroy(texture_buffer* texture);
+
 			void set_render_target(render_buffer* target);
 			render_buffer* render_target();
 
