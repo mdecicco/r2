@@ -74,6 +74,8 @@ namespace r2 {
 		if (buf) {
 			m_buffer = buf;
 			m_allocatedOwnBuffer = false;
+			alSourcei(m_source, AL_BUFFER, m_buffer->bufferId());
+			
 		} else {
 			m_buffer = new audio_buffer();
 			m_allocatedOwnBuffer = true;
@@ -150,6 +152,12 @@ namespace r2 {
 	void audio_source::setConeOuterAngle(f32 angle) {
 		alSourcef(m_source, AL_CONE_OUTER_ANGLE, angle);
 		if (!check_al_error()) m_coneOuterAngle = angle;
+	}
+
+
+	void audio_source::setPlayPosition(f32 time) {
+		alSourcef(m_source, AL_SEC_OFFSET, time);
+		check_al_error();
 	}
 
 	void audio_source::setPosition(const vec3f& pos) {

@@ -154,6 +154,9 @@ namespace r2 {
 	data_container::data_container(FILE* fp, const mstring& name, DATA_MODE mode)
 		: m_name(name), m_mode(mode), m_handle(fp), m_size(0), m_offset(0), m_inState(true) {
 		m_allocatorId = memory_man::current()->id();
+        fseek(fp, 0, SEEK_END);
+        m_size = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
 	}
     data_container::~data_container() {
     }

@@ -321,7 +321,9 @@ namespace r2 {
 			if (it != m_allocTrackers.end()) {
 				frequency_track& track = it->second;
 				if (track.allocs_per_second > 20) {
+					m_tracking_enabled = false;
 					track.free_blocks.push(block);
+					m_tracking_enabled = true;
 					m_size_in_tracked_pools += block->size;
 					return;
 				}
@@ -491,7 +493,9 @@ namespace r2 {
 				size_t free_count = track.free_blocks.size();
 				if (free_count > 0) {
 					memory_block* block = *track.free_blocks[free_count - 1];
+					m_tracking_enabled = false;
 					track.free_blocks.remove(free_count - 1);
+					m_tracking_enabled = true;
 					m_size_in_tracked_pools -= block->size;
 					return block;
 				}
@@ -621,7 +625,7 @@ namespace r2 {
 		m_clean_tracked_timer.start();
 
 
-		printf("purging unused blocks: %s -> ", format_size(m_size_in_tracked_pools));
+		//printf("purging unused blocks: %s -> ", format_size(m_size_in_tracked_pools));
 		for (auto& i = m_allocTrackers.begin();i != m_allocTrackers.end();++i) {
 			frequency_track& track = i->second;
 			if (track.free_blocks.size() > 0 && track.last_alloc_timer.elapsed() > 10.0f) {
@@ -635,7 +639,7 @@ namespace r2 {
 				track.count = 0;
 			}
 		}
-		printf("%s\n", format_size(m_size_in_tracked_pools));
+		//printf("%s\n", format_size(m_size_in_tracked_pools));
 	}
 
 	void memory_allocator::slow_check() {
