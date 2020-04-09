@@ -128,6 +128,46 @@ namespace r2 {
 		instance->scripts()->executeFile("./builtin.js");
 	}
 
+	r2engine* r2engine::get() { return instance; }
+
+	v8::Isolate* r2engine::isolate() { return instance->m_scriptMgr->context()->isolate(); }
+
+	const mvector<mstring>& r2engine::args() { return instance->m_args; }
+
+	memory_man* r2engine::memory() { return memory_man::get(); }
+
+	scene_man* r2engine::scenes() { return instance->m_sceneMgr; }
+
+	state_man* r2engine::states() { return instance->m_stateMgr; }
+
+	asset_man* r2engine::assets() { return instance->m_assetMgr; }
+
+	file_man* r2engine::files() { return instance->m_fileMgr; }
+
+	render_man* r2engine::renderer() { return instance->m_renderMgr; }
+
+	script_man* r2engine::scripts() { return instance->m_scriptMgr; }
+
+	input_man* r2engine::input() { return instance->m_inputMgr; }
+
+	audio_man* r2engine::audio() { return instance->m_audioMgr; }
+
+	log_man* r2engine::logs() { return logMgr; }
+
+	r2::window* r2engine::window() { return &instance->m_window; }
+
+	engine_state_data* r2engine::get_engine_state_data(u16 factoryIdx) { return instance->m_globalStateData[factoryIdx]; }
+
+	scene* r2engine::current_scene() {
+		scene* debugScene = instance->m_sceneMgr->get("##debug##");
+		if (debugScene) return debugScene;
+
+		state* currentState = instance->m_stateMgr->current();
+		if (currentState) return currentState->getScene();
+
+		return nullptr;
+	}
+
 	scripted_sys* r2engine::scripted_system(const mstring& systemName) {
 		for (scripted_sys* sys : instance->scripted_systems) {
 			if (sys->name == systemName) return sys;

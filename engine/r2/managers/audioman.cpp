@@ -18,14 +18,67 @@ namespace r2 {
 
 		return false;
 	}
-	audio_source::audio_source() {
+
+
+
+	audio_buffer::audio_buffer() {
+		m_buffer = UINT_MAX;
+		m_duration = 0.0f;
+	}
+
+	audio_buffer::~audio_buffer() {
+		if (m_buffer != UINT_MAX) alDeleteBuffers(1, &m_buffer);
+	}
+
+
+	bool audio_buffer::fill(audio_source_format format, void* data, size_t data_size, size_t sampleRate) {
+		if (m_buffer != UINT_MAX) {
+			alDeleteBuffers(1, &m_buffer);
+			m_buffer = UINT_MAX;
+		}
+
+		alGenBuffers(1, &m_buffer);
+		if (check_al_error()) {
+			r2Error("Failed to create OpenAL buffer");
+			return false;
+		}
+
+		alBufferData(m_buffer, format, data, data_size, sampleRate);
+		bool ret = check_al_error();
+		if (!ret) {
+			size_t sample_size = 1;
+			size_t channels = 1;
+			if (format == asf_stereo_8bit) channels = 2;
+			else if (format == asf_mono_16bit) sample_size = 2;
+			else if (format == asf_stereo_16bit) {
+				sample_size = 2;
+				channels = 2;
+			}
+			m_duration = f32((data_size / channels) / sample_size) / f32(sampleRate);
+		} else {
+			r2Error("Failed to fill OpenAL buffer with data");
+			alDeleteBuffers(1, &m_buffer);
+			m_buffer = UINT_MAX;
+		}
+
+		return !ret;
+	}
+
+
+
+	audio_source::audio_source(audio_buffer* buf) {
 		m_source = UINT_MAX;
 		alGenSources(1, &m_source);
 		check_al_error();
 
-		m_buffer = UINT_MAX;
+		if (buf) {
+			m_buffer = buf;
+			m_allocatedOwnBuffer = false;
+		} else {
+			m_buffer = new audio_buffer();
+			m_allocatedOwnBuffer = true;
+		}
 
-		m_duration = 0.0f;
 		setPosition(vec3f(0, 0, 0));
 		setVelocity(vec3f(0, 0, 0));
 		setPitch(1.0f);
@@ -44,8 +97,8 @@ namespace r2 {
 	}
 
 	audio_source::~audio_source() {
-		if (m_buffer != UINT_MAX) alDeleteBuffers(1, &m_buffer);
 		if (m_source != UINT_MAX) alDeleteSources(1, &m_source);
+		if (m_allocatedOwnBuffer && m_buffer) delete m_buffer;
 		check_al_error();
 	}
 
@@ -125,37 +178,25 @@ namespace r2 {
 			return false;
 		}
 
-		if (m_buffer != UINT_MAX) {
-			alDeleteBuffers(1, &m_buffer);
-			m_buffer = UINT_MAX;
+		if (m_buffer->fill(format, data, data_size, sampleRate)) {
+			alSourcei(m_source, AL_BUFFER, m_buffer->bufferId());
+		}
+	}
+
+	void audio_source::buffer(audio_buffer* buffer) {
+		if (m_source == UINT_MAX) {
+			r2Error("Audio source has invalid OpenAL source");
+			return;
 		}
 
-		alGenBuffers(1, &m_buffer);
-		if (check_al_error()) {
-			r2Error("Failed to create OpenAL buffer for source");
-			return false;
+		if (m_buffer && m_buffer != buffer && m_allocatedOwnBuffer) {
+			delete m_buffer;
+			m_buffer = nullptr;
+			m_allocatedOwnBuffer = false;
 		}
 
-		alBufferData(m_buffer, format, data, data_size, sampleRate);
-		bool ret = check_al_error();
-		if (!ret) {
-			size_t sample_size = 1;
-			size_t channels = 1;
-			if (format == asf_stereo_8bit) channels = 2;
-			else if (format == asf_mono_16bit) sample_size = 2;
-			else if (format == asf_stereo_16bit) {
-				sample_size = 2;
-				channels = 2;
-			}
-			m_duration = f32((data_size / channels) / sample_size) / f32(sampleRate);
-			alSourcei(m_source, AL_BUFFER, m_buffer);
-		} else {
-			r2Error("Failed to fill OpenAL buffer with data");
-			alDeleteBuffers(1, &m_buffer);
-			m_buffer = UINT_MAX;
-		}
-
-		return !ret;
+		alSourcei(m_source, AL_BUFFER, buffer->bufferId());
+		m_buffer = buffer;
 	}
 
 	void audio_source::play() {
