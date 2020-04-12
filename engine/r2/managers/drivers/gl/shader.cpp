@@ -50,9 +50,12 @@ namespace r2 {
 	}
 
 	gl_shader_program::gl_shader_program() {
+		m_program = 0;
 	}
 
 	gl_shader_program::~gl_shader_program() {
+		if (m_program) glDeleteProgram(m_program);
+		m_program = 0;
 	}
 
 	bool gl_shader_program::deserialize(const unsigned char* data, size_t length) {
@@ -65,8 +68,27 @@ namespace r2 {
 		mstring vert = contents.substr(0, fIdx);
 		mstring frag = contents.substr(fIdx);
 
-		m_program = create_program(vert.c_str(), frag.c_str());
-		return m_program > 0;
+
+		GLuint prog = create_program(vert.c_str(), frag.c_str());
+		if (prog == 0) return false;
+		if (m_program) {
+			glDeleteProgram(m_program);
+
+			for (auto it = m_uniformBlocks.begin();it != m_uniformBlocks.end();it++) {
+				u32 idx = 0;
+				glCall(idx = glGetUniformBlockIndex(prog, it->first.c_str()));
+				if (idx == GL_INVALID_INDEX) {
+					// r2Error("Failed to find uniform block \"%s\" in shader.", name.c_str());
+					m_uniformBlocks[it->first] = { GL_INVALID_INDEX, GL_INVALID_INDEX };
+				} else {
+					u32 bindingIdx = m_uniformBlocks.size();
+					glCall(glUniformBlockBinding(prog, idx, bindingIdx));
+					m_uniformBlocks[it->first] = { idx, bindingIdx };
+				}
+			}
+		}
+		m_program = prog;
+		return true;
 	}
 
 	bool gl_shader_program::serialize(unsigned char** data, size_t* length) {

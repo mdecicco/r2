@@ -1,6 +1,8 @@
 #pragma once
 #include <r2/managers/memman.h>
 #include <r2/managers/engine_state.h>
+#include <sys/stat.h>
+#include <r2/utilities/periodic_update.h>
 
 namespace r2 {
 	class asset;
@@ -30,6 +32,7 @@ namespace r2 {
 
             bool load(const mstring& path);
             bool save(const mstring& path);
+            void reload_if_updated();
 
             virtual bool deserialize(const unsigned char* data, size_t length) = 0;
             virtual bool serialize(unsigned char** data, size_t* length) = 0;
@@ -43,9 +46,10 @@ namespace r2 {
 
             mstring m_name;
 			mstring m_filename;
+            struct stat m_fileStat;
     };
 
-    class asset_man {
+    class asset_man : public periodic_update {
         public:
             asset_man();
             ~asset_man();
@@ -86,6 +90,8 @@ namespace r2 {
 				delete a;
 				m_stateData.disable();
             }
+
+            virtual void doUpdate(f32 frameDt, f32 updateDt);
 
         protected:
             bool check_exists(const mstring& name, bool test, const mstring& err);

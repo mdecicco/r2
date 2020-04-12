@@ -667,6 +667,7 @@ namespace r2 {
 
 		auto material = node->material_instance();
 		auto shader = material->material()->shader();
+		if (!shader) return;
 		shader->activate();
 
 		if (material->material()->format() && material->material()->format()->size() > 0) {

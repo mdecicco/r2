@@ -63,6 +63,8 @@ namespace r2 {
                 m_useFinishedCb = true;
                 m_finished = cb;
             }
+
+            inline bool stopped() const { return m_isStopped; }
             
             interpolator& operator = (const t& value) {
                 if(!m_isStopped) m_initial = *this;

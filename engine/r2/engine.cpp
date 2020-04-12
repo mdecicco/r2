@@ -377,14 +377,13 @@ namespace r2 {
 
 			// dispatch deferred events
 			frame_started();
-			auto driver = m_renderMgr->driver();
-			driver->clear_framebuffer(vec4f(0.25f, 0.25f, 0.25f, 1.0f), true);
-			driver->set_viewport(vec2i(0, 0), m_window.get_size());
 
 			f32 time_now = frameTimer;
 			f32 dt = time_now - last_time;
 			last_time = time_now;
 			m_fps = 1.0f / dt;
+
+			m_assetMgr->update(dt);
 
 			state* currentState = m_stateMgr->current();
 			if (currentState) currentState->update(dt);
@@ -399,7 +398,10 @@ namespace r2 {
 			//printf("update_entities took %f ms\n", ut * 1000.0f);
 
 			scene* currentScene = current_scene();
+			auto driver = m_renderMgr->driver();
+			driver->set_viewport(vec2i(0, 0), m_window.get_size());
 			if (currentScene) currentScene->render(dt);
+			else driver->clear_framebuffer(vec4f(0.25f, 0.25f, 0.25f, 1.0f), true);
 
 			ImGui_ImplGlfwGL3_NewFrame();
 			if (currentState) currentState->render();

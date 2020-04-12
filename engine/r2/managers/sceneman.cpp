@@ -394,6 +394,7 @@ namespace r2 {
         m_mgr = m;
         m_name = name;
 		m_sceneUniforms = allocate_uniform_block("u_scene", static_uniform_formats::scene());
+		clearColor = vec4f(0.25f, 0.25f, 0.25f, 0.25f);
         r2Log("Scene created (%s)", m_name.c_str());
     }
 
@@ -642,7 +643,7 @@ namespace r2 {
 		transparent.reserve(m_nodes.size());
 
 		driver->bind_render_target(m_renderTarget);
-		driver->clear_framebuffer(vec4f(0.0f, 0.0f, 0.0f, 0.0f), m_renderTarget ? m_renderTarget->depth_mode() != rbdm_no_depth : true);
+		driver->clear_framebuffer(clearColor, m_renderTarget ? m_renderTarget->depth_mode() != rbdm_no_depth : true);
 		
 		for (auto node : m_nodes) {
 			node_material_instance* mat = node->material_instance();

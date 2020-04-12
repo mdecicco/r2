@@ -26,7 +26,8 @@ namespace r2 {
 			ALuint m_buffer;
 			f32 m_duration;
 	};
-
+	
+	#define NO_AUDIO_BUFFER ((audio_buffer*)0xDEADBEEF)
 	class audio_source {
 		public:
 			audio_source(audio_buffer* buf = nullptr);

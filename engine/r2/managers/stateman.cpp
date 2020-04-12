@@ -231,8 +231,8 @@ namespace r2 {
 	}
 
 	void state::_willBecomeActive() {
-		activate_allocator();
 		if (!m_engineData) init();
+		activate_allocator();
 
 		willBecomeActive();
 

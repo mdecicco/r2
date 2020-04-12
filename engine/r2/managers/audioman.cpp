@@ -72,10 +72,14 @@ namespace r2 {
 		check_al_error();
 
 		if (buf) {
-			m_buffer = buf;
-			m_allocatedOwnBuffer = false;
-			alSourcei(m_source, AL_BUFFER, m_buffer->bufferId());
-			
+			if (buf != NO_AUDIO_BUFFER) {
+				m_buffer = buf;
+				m_allocatedOwnBuffer = false;
+				alSourcei(m_source, AL_BUFFER, m_buffer->bufferId());
+			} else {
+				m_buffer = nullptr;
+				m_allocatedOwnBuffer = false;
+			}
 		} else {
 			m_buffer = new audio_buffer();
 			m_allocatedOwnBuffer = true;

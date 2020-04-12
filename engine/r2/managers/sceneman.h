@@ -251,6 +251,7 @@ namespace r2 {
 			void release_resources();
 
 			scene_entity* camera;
+			vec4f clearColor;
 
         protected:
             friend class scene_man;
