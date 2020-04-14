@@ -104,7 +104,10 @@ namespace r2 {
 		camera_component* cam = entity->camera.get();
 
 		// do nothing if the camera is already active
-		if (cam->active) return;
+		if (cam->active) {
+			state.disable();
+			return;
+		}
 
 		// set the active camera to inactive, if there is one
 		state->for_each<camera_component>([](camera_component* c) {
@@ -120,5 +123,6 @@ namespace r2 {
 		// activate this one
 		cam->active = true;
 		curScene->camera = entity;
+		state.disable();
 	}
 };

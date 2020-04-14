@@ -435,6 +435,7 @@ namespace r2 {
 
 		return NULL;
 	}
+
 	engine_state_data_factory* state_man::factory(u16 factoryIdx) {
 		return m_engineStateDataFactories[factoryIdx];
 	}
@@ -479,9 +480,10 @@ namespace r2 {
 	}
 
 	void state_man::destroyStates() {
-		for(auto state : m_states) {
+		for (auto state : m_states) {
 			delete state;
 		}
+
 		m_states.clear();
 	}
 };

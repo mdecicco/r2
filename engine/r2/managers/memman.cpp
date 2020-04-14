@@ -18,7 +18,7 @@ namespace r2 {
 		return (n + sizeof(word) - 1) & ~(sizeof(word) - 1);
 	}
 
-	bool checkSize(memory_block* block) {
+	inline bool checkSize(memory_block* block) {
 		if (block->next) {
 			size_t memDiff = size_t(block->next) - size_t(block);
 			size_t shouldBe = block->size + sizeof(memory_block);
@@ -153,8 +153,8 @@ namespace r2 {
 
 		assert(block != nullptr);
 
+		if (!block->used) m_used += block->size;
 		block->used = m_id;
-		m_used += align(size);
 
 		purge_unused_tracked_blocks();
 		return ptrFromBlock(block);
@@ -215,6 +215,10 @@ namespace r2 {
 	}
 
 	void memory_allocator::deallocate_all() {
+		memory_man::push_current(memory_man::global());
+		m_allocTrackers.clear();
+		memory_man::pop_current();
+
 		m_baseBlock = (memory_block*)m_base;
 		m_baseBlock->size = m_size - sizeof(memory_block);
 		m_baseBlock->next = nullptr;
@@ -222,6 +226,29 @@ namespace r2 {
 		m_used = sizeof(memory_block);
 		m_blockCount = 1;
 		m_mergeCounter = 50;
+
+		for (size_t i = 0;i < m_used_pool_count;i++) {
+			free_list* node = m_freePools[i].next;
+			while (node) {
+				free_list* next = node->next;
+				
+				node->next = m_emptyFreePools.next;
+				node->block = nullptr;
+				m_emptyFreePools.next = node;
+
+				node = next;
+			}
+		}
+
+		for (u8 i = 0;i < FREE_POOL_COUNT;i++) {
+			m_freePools[i].block = nullptr;
+			m_freePools[i].next = nullptr;
+			m_freePoolStats[i].count = 0;
+			m_freePoolStats[i].size = 0;
+			m_freePoolStats[i].min_block_size = 0;
+			m_freePoolStats[i].max_block_size = 0;
+		}
+
 		memset(ptrFromBlock(m_baseBlock), 0xFC, m_baseBlock->size);
 	}
 
@@ -399,6 +426,9 @@ namespace r2 {
 
 				block->next = nextBlock;
 
+				m_used += sizeDiff + sizeof(memory_block);
+				if (nextBlock->used) m_used += nextBlock->size;
+
 				return ptr;
 			} else {
 				// nope. allocate a new one, copy this one to it, and deallocate this one
@@ -422,6 +452,9 @@ namespace r2 {
 				nextBlock->size = oldNextSize + sizeDiff;
 				nextBlock->used = add_to_free_list(nextBlock);
 
+				if (nextBlock->used) m_used += nextBlock->size;
+				else m_used -= sizeDiff;
+
 				block->next = nextBlock;
 
 				return ptr;
@@ -436,6 +469,10 @@ namespace r2 {
 				nextBlock->next = oldNextBlock;
 				nextBlock->size = sizeDiff - sizeof(memory_block);
 				nextBlock->used = add_to_free_list(nextBlock);
+
+				m_used += sizeof(memory_block);
+				if (nextBlock->used) m_used += nextBlock->size;
+				else m_used -= sizeDiff;
 
 				block->next = nextBlock;
 
@@ -477,7 +514,7 @@ namespace r2 {
 	}
 
 	memory_block* memory_allocator::find_available(size_t size) {
-		if (m_tracking_enabled && size > m_freePoolStats[m_used_pool_count - 1].max_block_size) {
+		if (m_tracking_enabled && (m_used_pool_count == 0 || size > m_freePoolStats[m_used_pool_count - 1].max_block_size)) {
 			auto it = m_allocTrackers.find(size);
 			if (it != m_allocTrackers.end()) {
 				frequency_track& track = it->second;
@@ -521,7 +558,7 @@ namespace r2 {
 
 					b->next = nb;
 					b->size = size;
-					b->used = true;
+					b->used = false;
 
 					checkSize(b);
 					checkSize(nb);
@@ -754,6 +791,9 @@ namespace r2 {
 	}
 
 	void memory_man::push_current(memory_allocator* allocator) {
+		if (allocator->id() > 2) {
+			printf("wtf?\n");
+		}
 		allocator_stack* s = (allocator_stack*)memory_man::instance->m_baseAllocator.allocate(sizeof(allocator_stack));
 		s->last = nullptr;
 		s->next = memory_man::instance->m_allocatorStack;
@@ -777,6 +817,9 @@ namespace r2 {
 		memory_man::instance->m_allocatorStack = cur->next;
 		memory_man::instance->m_allocatorStack->last = nullptr;
 		memory_man::instance->m_baseAllocator.deallocate_from_self(cur);
+		if (memory_man::instance->m_allocatorStack->allocator->id() > 2) {
+			printf("wtf?\n");
+		}
 		return allocator;
 	}
 
