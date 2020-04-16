@@ -59,7 +59,10 @@ namespace r2 {
 				changed = true;
 			}
 
-			if (changed) transform->transform = glm::translate(j_rot, j_pos);
+			if (changed) {
+				transform->transform = glm::translate(j_rot, j_pos);
+				camera->update_frustum();
+			}
 		}
 	}
 };

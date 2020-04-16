@@ -2,6 +2,31 @@
 #include <r2/systems/entity.h>
 
 namespace r2 {
+	enum plane_index {
+		pi_right,
+		pi_left,
+		pi_bottom,
+		pi_top,
+		pi_far,
+		pi_near
+	};
+
+	class camera_frustum {
+		public:
+			struct frustum_plane {
+				vec3f normal;
+				f32 distance;
+			};
+
+			camera_frustum();
+			~camera_frustum();
+
+			void set(const mat4f& mvp);
+			bool contains(const vec3f& point, f32 radius = -0.0f) const;
+
+			frustum_plane planes[6];
+	};
+
 	class camera_component : public scene_entity_component {
 		public:
 			camera_component();
@@ -9,8 +34,10 @@ namespace r2 {
 
 			void activate();
 			inline bool is_active() const { return active; }
+			void update_frustum();
 
 			mat4f projection;
+			camera_frustum frustum;
 
 		protected:
 			friend class camera_sys;
