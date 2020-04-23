@@ -22,8 +22,8 @@ namespace r2 {
 			script(state* parentState);
 			~script();
 
-			virtual bool deserialize(const unsigned char* data,size_t length);
-			virtual bool serialize(unsigned char** data,size_t* length);
+			virtual bool deserialize(const unsigned char* data, size_t length);
+			virtual bool serialize(unsigned char** data, size_t* length);
 
 			bool valid() const { return m_is_valid; }
 
@@ -42,8 +42,8 @@ namespace r2 {
 
 			void initialize();
 
-			void execute(const mstring& script);
-			void executeFile(const mstring& file);
+			bool execute(const mstring& script, v8::Local<v8::Value>* result = nullptr);
+			bool executeFile(const mstring& file, v8::Local<v8::Value>* result = nullptr);
 
 			v8pp::context* context() { return m_context; }
 

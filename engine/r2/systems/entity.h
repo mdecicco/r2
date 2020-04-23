@@ -71,6 +71,7 @@ namespace r2 {
 			inline scene_entity* parent() const { return m_parent; }
 			inline bool doesUpdate() const { return m_doesUpdate; }
 			inline bool has_children() const { return m_children->size() > 0; }
+			Local<Object> script_obj() const;
 
 			/* Functions for scripted entities */
 			void call(const mstring& function, u8 argc = 0, LocalValueHandle* args = nullptr);

@@ -61,12 +61,17 @@ namespace r2 {
 		m_name = new mstring(name);
 		m_children = new mlist<scene_entity*>();
 
+		m_scriptFuncs = new munordered_map<mstring, PersistentFunctionHandle>();
+
 		initialize_periodic_update();
 		initialize_event_receiver();
 		r2engine::entity_created(this);
 		
-		m_scripted = false;
+		m_scripted = true;//false;
 		m_doesUpdate = false;
+
+		Local<Object> obj = class_<scene_entity, v8pp::raw_ptr_traits>::import_external(r2engine::isolate(), this);
+		m_scriptObj.Reset(r2engine::isolate(), obj);
 	}
 
 	scene_entity::~scene_entity() {
@@ -79,6 +84,11 @@ namespace r2 {
 		}
 		delete m_children;
 		m_children = nullptr;
+	}
+
+	Local<Object> scene_entity::script_obj() const {
+		if (m_scriptObj.IsEmpty()) return Local<Object>::Cast(Null(r2engine::isolate()));
+		return Local<Object>::Cast(m_scriptObj.Get(r2engine::isolate()));
 	}
 
 	void scene_entity::call(const mstring& function, u8 argc, LocalValueHandle* args) {

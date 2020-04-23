@@ -228,8 +228,8 @@ namespace r2 {
 		m_context->set("require", wrap_function(m_context->isolate(), "require", &js_require));
 	}
 
-	void script_man::execute(const mstring& source) {
-		if (source.length() == 0) return;
+	bool script_man::execute(const mstring& source, v8::Local<v8::Value>* result) {
+		if (source.length() == 0) return false;
 
 		auto isolate = m_context->isolate();
 		Local<Context> context = isolate->GetCurrentContext();
@@ -240,19 +240,35 @@ namespace r2 {
 		Local<Script> script;
 		bool is_valid = Script::Compile(context, convert<mstring>::to_v8(isolate, source), &origin).ToLocal(&script);
 
-		if (try_catch.HasCaught()) script_exception(isolate, try_catch.Exception(), try_catch.Message());
+		if (try_catch.HasCaught()) {
+			script_exception(isolate, try_catch.Exception(), try_catch.Message());
+			return false;
+		}
 
-		if (!is_valid) return;
+		if (!is_valid) return false;
 
 		if (!script.IsEmpty()) {
-			script->Run(context);
-			if (try_catch.HasCaught()) script_exception(isolate, try_catch.Exception(), try_catch.Message());
-		} else r2Error("Command is empty");
+			if (result) {
+				EscapableHandleScope scope(isolate);
+				MaybeLocal<Value> ret = script->Run(context);
+				scope.EscapeMaybe(ret).ToLocal(result);
+			} else script->Run(context);
+
+			if (try_catch.HasCaught()) {
+				script_exception(isolate, try_catch.Exception(), try_catch.Message());
+				return false;
+			}
+		} else {
+			r2Error("Command is empty");
+			return false;
+		}
+
+		return true;
 	}
 
-	void script_man::executeFile(const mstring& file) {
+	bool script_man::executeFile(const mstring& file, v8::Local<v8::Value>* result) {
 		mstring source = get_contents(file);
-		if (source.length() == 0) return;
+		if (source.length() == 0) return false;
 
 		auto isolate = m_context->isolate();
 		Local<Context> context = isolate->GetCurrentContext();
@@ -263,14 +279,30 @@ namespace r2 {
 		Local<Script> script;
 		bool is_valid = Script::Compile(context, convert<mstring>::to_v8(isolate, source), &origin).ToLocal(&script);
 
-		if (try_catch.HasCaught()) script_exception(isolate, try_catch);
+		if (try_catch.HasCaught()) {
+			script_exception(isolate, try_catch);
+			return false;
+		}
 
-		if (!is_valid) return;
+		if (!is_valid) return false;
 
 		if (!script.IsEmpty()) {
-			script->Run(context);
-			if (try_catch.HasCaught()) script_exception(isolate, try_catch);
-		} else r2Error("Script \"%s\" is empty", file.c_str());
+			if (result) {
+				EscapableHandleScope scope(isolate);
+				MaybeLocal<Value> ret = script->Run(context);
+				scope.EscapeMaybe(ret).ToLocal(result);
+			} else script->Run(context);
+
+			if (try_catch.HasCaught()) {
+				script_exception(isolate, try_catch);
+				return false;
+			}
+		} else {
+			r2Error("Script \"%s\" is empty", file.c_str());
+			return false;
+		}
+
+		return true;
 	}
 
 

@@ -84,6 +84,7 @@ namespace r2 {
 					u32 bindingIdx = m_uniformBlocks.size();
 					glCall(glUniformBlockBinding(prog, idx, bindingIdx));
 					m_uniformBlocks[it->first] = { idx, bindingIdx };
+					r2Log("%s: Block binding for '%s' updated to (%d, %d)", m_name.c_str(), it->first.c_str(), idx, bindingIdx);
 				}
 			}
 		}

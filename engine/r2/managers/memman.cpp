@@ -881,6 +881,10 @@ namespace r2 {
 	}
 
 	void* r2realloc(void* ptr, size_t sz) {
+		if (!ptr) {
+			r2Warn("Something tried to reasize a null pointer... Returning allocated memory with desired size");
+			return r2alloc(sz);
+		}
 		//void* ret = memory_man::get()->allocate(align(sz));
 		//printf("r2alloc(%d:%d): 0x%X\n", sz, align(sz), (u64)ret);
 		//return ret;
@@ -888,6 +892,10 @@ namespace r2 {
 	}
 
 	void r2free(void* ptr) {
+		if (!ptr) {
+			r2Warn("Something tried to delete a null pointer...");
+			return;
+		}
 		//printf("r2free: 0x%X\n", ptr);
 		memory_man::deallocate(ptr);
 	}
