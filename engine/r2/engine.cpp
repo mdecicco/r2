@@ -48,12 +48,24 @@ namespace r2 {
 	}
 
 	void r2engine::entity_created(scene_entity* entity) {
-		for(entity_system* sys : r2engine::systems) {
-			sys->_entity_added(entity);
+		for(entity_system* sys : r2engine::systems) sys->_entity_added(entity);
+		for(entity_system* sys : r2engine::scripted_systems) sys->_entity_added(entity);
+
+		/*
+		if (!r2engine::instance->m_loopDidStart) {
+			r2engine::instance->m_entities.enable();
+			auto& entities = r2engine::instance->m_entities->entities;
+			auto& updatingEntities = r2engine::instance->m_entities->updatingEntities;
+			
+			if (!entity->parent()) r2engine::instance->add_child(entity);
+			entity->initialize();
+			entities.set(entity->id(), entity);
+			if (entity->doesUpdate()) updatingEntities.set(entity->id(), entity);
+
+			r2engine::instance->m_entities.disable();
+			return;
 		}
-		for(entity_system* sys : r2engine::scripted_systems) {
-			sys->_entity_added(entity);
-		}
+		*/
 
 		auto ref = r2engine::instance->m_entities;
 		ref.enable();
@@ -62,24 +74,17 @@ namespace r2 {
 	}
 
 	void r2engine::entity_destroyed(scene_entity* entity) {
-		for(entity_system* sys : r2engine::systems) {
-			sys->_entity_removed(entity);
-		}
-		for(entity_system* sys : r2engine::scripted_systems) {
-			sys->_entity_removed(entity);
-		}
+		for(entity_system* sys : r2engine::systems) sys->_entity_removed(entity);
+		for(entity_system* sys : r2engine::scripted_systems) sys->_entity_removed(entity);
 
 		auto ref = r2engine::instance->m_entities;
 		ref.enable();
 
 		auto& entities = ref->entities;
-		if (entities.has(entity->id())) {
-			entities.remove(entity->id());
-		}
+		if (entities.has(entity->id())) entities.remove(entity->id());
+
 		auto& updatingEntities = ref->updatingEntities;
-		if (updatingEntities.has(entity->id())) {
-			updatingEntities.remove(entity->id());
-		}
+		if (updatingEntities.has(entity->id())) updatingEntities.remove(entity->id());
 
 		bool wasUninitialized = false;
 		for (auto it = ref->uninitializedEntities->begin(); it != ref->uninitializedEntities->end(); it++) {
@@ -102,6 +107,7 @@ namespace r2 {
 		r2engine::register_system(camera_sys::get());
 		r2engine::register_system(mesh_sys::get());
 		r2engine::register_system(physics_sys::get());
+		r2engine::register_system(lighting_sys::get());
 
 		logMgr = new log_man();
 		instance = new r2engine(argc, argv);
@@ -154,6 +160,8 @@ namespace r2 {
 
 	log_man* r2engine::logs() { return logMgr; }
 
+	interpolation_man* r2engine::interpolation() { return instance->m_interpMgr; }
+
 	r2::window* r2engine::window() { return &instance->m_window; }
 
 	engine_state_data* r2engine::get_engine_state_data(u16 factoryIdx) { return instance->m_globalStateData[factoryIdx]; }
@@ -175,6 +183,10 @@ namespace r2 {
 
 		r2Error("No system with the name '%s' exists", systemName.c_str());
 		return nullptr;
+	}
+	
+	marl::Scheduler* r2engine::scheduler() {
+		return &instance->m_scheduler;
 	}
 
 
@@ -198,7 +210,9 @@ namespace r2 {
 		m_sceneMgr = new scene_man();
 		m_scriptMgr = new script_man();
 		m_audioMgr = new audio_man();
+		m_interpMgr = new interpolation_man();
 		m_inputMgr = nullptr;
+		m_loopDidStart = false;
 
 		mstring currentDir = argv[0];
 		currentDir = currentDir.substr(0, currentDir.find_last_of('\\'));
@@ -208,9 +222,14 @@ namespace r2 {
 			glfwTerminate();
 			r2Error("GLFW Could not be initialized!\n");
 		}
+
+		m_scheduler.bind();
+		m_scheduler.setWorkerThreadCount(marl::Thread::numLogicalCPUs());
     }
 
     r2engine::~r2engine() {
+		m_scheduler.unbind();
+
 		m_stateMgr->clearActive();				// depends on script manager, entities
 		m_stateMgr->destroyStates();			// depends on script manager, entities
 
@@ -360,6 +379,8 @@ namespace r2 {
 	}
 
     int r2engine::run() {
+		m_loopDidStart = true;
+
 		timer frameTimer; frameTimer.start();
 		f32 last_time = 0.0f;
 
@@ -374,6 +395,9 @@ namespace r2 {
 			if (m_inputMgr) m_inputMgr->poll();
 
 			if (m_inputMgr && m_inputMgr->keyboard()->isKeyDown(OIS::KC_ESCAPE)) break;
+
+			// update value animations
+			m_interpMgr->update();
 
 			// dispatch deferred events
 			frame_started();

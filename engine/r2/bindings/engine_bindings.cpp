@@ -3,21 +3,9 @@
 #include <v8pp/json.hpp>
 #include <v8pp/convert.hpp>
 #include <r2/systems/scripted_sys.h>
+#include <r2/utilities/interpolator.hpp>
 
 using namespace v8;
-namespace v8pp {
-	template<>
-	struct convert<r2::log_info> {
-		using from_type = r2::log_info;
-		using to_type = v8::Handle<v8::Object>;
-
-		static bool is_valid(v8::Isolate* isolate, v8::Handle<v8::Value> value);
-
-		static r2::log_info from_v8(v8::Isolate* isolate, v8::Handle<v8::Object> obj);
-
-		static v8::Handle<v8::Object> to_v8(v8::Isolate* isolate, r2::log_info const& value);
-	};
-};
 using namespace v8pp;
 
 namespace r2 {
@@ -233,6 +221,25 @@ namespace r2 {
 		}
 
 		{
+			module itm(isolate);
+			itm.set_const("None", interpolate::itm_none);
+			itm.set_const("Linear", interpolate::itm_linear);
+			itm.set_const("EaseInQuad", interpolate::itm_easeInQuad);
+			itm.set_const("EaseOutQuad", interpolate::itm_easeOutQuad);
+			itm.set_const("EaseInOutQuad", interpolate::itm_easeInOutQuad);
+			itm.set_const("EaseInCubic", interpolate::itm_easeInCubic);
+			itm.set_const("EaseOutCubic", interpolate::itm_easeOutCubic);
+			itm.set_const("EaseInOutCubic", interpolate::itm_easeInOutCubic);
+			itm.set_const("EaseInQuart", interpolate::itm_easeInQuart);
+			itm.set_const("EaseOutQuart", interpolate::itm_easeOutQuart);
+			itm.set_const("EaseInOutQuart", interpolate::itm_easeInOutQuart);
+			itm.set_const("EaseInQuint", interpolate::itm_easeInQuint);
+			itm.set_const("EaseOutQuint", interpolate::itm_easeOutQuint);
+			itm.set_const("EaseInOutQuint", interpolate::itm_easeInOutQuint);
+			m.set("Interpolation", itm);
+		}
+
+		{
 			class_<scene_entity, v8pp::raw_ptr_traits> s(isolate);
 			s.ctor<v8Args>();
 			register_class_state(s);
@@ -246,17 +253,28 @@ namespace r2 {
 			s.set("unsubscribe", &scene_entity::unsubscribe);
 			s.set("add_component", &scene_entity::add_custom_component);
 			s.set("remove_component", &scene_entity::remove_custom_component);
+			s.set("set_transition", &scene_entity::set_interpolation);
 			m.set("Entity", s);
 		}
 
 		{
 			class_<scripted_sys, v8pp::raw_ptr_traits> s(isolate);
 			s.ctor<v8Args>();
+			register_class_state(s);
 			s.set("set_update_frequency", &scripted_sys::setUpdateFrequency);
 			s.set("get_average_update_duration", &scripted_sys::getAverageUpdateDuration);
 			s.set("query_components", &scripted_sys::queryComponents);
-			register_class_state(s);
 			m.set("System", s);
+		}
+
+		{
+			class_<log_info, v8pp::raw_ptr_traits> s(isolate);
+			register_class_state(s);
+			s.auto_wrap_objects(true);
+			s.set("text", &log_info::text);
+			s.set("time", &log_info::time);
+			s.set("type", &log_info::type);
+			ctx->set("LogType", s);
 		}
 
 		m.set("log", &log);

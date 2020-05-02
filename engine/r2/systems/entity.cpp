@@ -47,6 +47,7 @@ namespace r2 {
 
 		m_scriptFuncs = new munordered_map<mstring, PersistentFunctionHandle>();
 		m_children = new mlist<scene_entity*>();
+		m_propInterpolation = new munordered_map<mstring, prop_interpolate_info>();
 
 		initialize_periodic_update();
 		initialize_event_receiver();
@@ -59,9 +60,9 @@ namespace r2 {
 	scene_entity::scene_entity(const mstring& name)
 		: m_id(scene_entity::nextEntityId++), m_name(nullptr), m_scriptFuncs(nullptr), m_destroyed(false), m_parent(nullptr), m_children(nullptr), isolate(nullptr) {
 		m_name = new mstring(name);
-		m_children = new mlist<scene_entity*>();
-
 		m_scriptFuncs = new munordered_map<mstring, PersistentFunctionHandle>();
+		m_children = new mlist<scene_entity*>();
+		m_propInterpolation = new munordered_map<mstring, prop_interpolate_info>();
 
 		initialize_periodic_update();
 		initialize_event_receiver();
@@ -70,8 +71,9 @@ namespace r2 {
 		m_scripted = true;//false;
 		m_doesUpdate = false;
 
-		Local<Object> obj = class_<scene_entity, v8pp::raw_ptr_traits>::import_external(r2engine::isolate(), this);
-		m_scriptObj.Reset(r2engine::isolate(), obj);
+		isolate = r2engine::isolate();
+		Local<Object> obj = class_<scene_entity, v8pp::raw_ptr_traits>::reference_external(isolate, this);
+		m_scriptObj.Reset(isolate, obj);
 	}
 
 	scene_entity::~scene_entity() {
@@ -87,8 +89,8 @@ namespace r2 {
 	}
 
 	Local<Object> scene_entity::script_obj() const {
-		if (m_scriptObj.IsEmpty()) return Local<Object>::Cast(Null(r2engine::isolate()));
-		return Local<Object>::Cast(m_scriptObj.Get(r2engine::isolate()));
+		if (m_scriptObj.IsEmpty()) return Local<Object>::Cast(Null(isolate));
+		return Local<Object>::Cast(m_scriptObj.Get(isolate));
 	}
 
 	void scene_entity::call(const mstring& function, u8 argc, LocalValueHandle* args) {
@@ -138,6 +140,26 @@ namespace r2 {
 		return obj->Set(v8str(function.c_str()), wrap_function(isolate, function.c_str(), func));
 	}
 
+	bool scene_entity::bind(entity_system* system, const mstring& parentPropName, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args)) {
+		if (!m_scripted) return false;
+		if (!ensure_object_handle()) return false;
+
+		auto func = [system, this, callback](v8Args args) {
+			callback(system, this, args);
+		};
+
+		LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+
+		Local<Value> parentObjVal = obj->Get(v8str(parentPropName.c_str()));
+		if (parentObjVal.IsEmpty() || parentObjVal->IsNullOrUndefined()) {
+			parentObjVal = Object::New(isolate);
+			obj->Set(v8str(parentPropName.c_str()), parentObjVal);
+		}
+		LocalObjectHandle parentObj = LocalObjectHandle::Cast(parentObjVal);
+
+		return parentObj->Set(v8str(function.c_str()), wrap_function(isolate, function.c_str(), func));
+	}
+
 	bool scene_entity::bind(scene_entity_component* component, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set, v8::PropertyAttribute attribute) {
 		if (!m_scripted) return false;
 		if (!ensure_object_handle()) return false;
@@ -146,6 +168,26 @@ namespace r2 {
 
 		LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
 		obj->SetAccessorProperty(v8str(prop.c_str()), get, set, attribute);
+
+		return true;
+	}
+
+	bool scene_entity::bind(scene_entity_component* component, const mstring& parentPropName, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set, v8::PropertyAttribute attribute) {
+		if (!m_scripted) return false;
+		if (!ensure_object_handle()) return false;
+
+		v8::Isolate* isolate = r2engine::isolate();
+
+		LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+
+		Local<Value> parentObjVal = obj->Get(v8str(parentPropName.c_str()));
+		if (parentObjVal.IsEmpty() || parentObjVal->IsNullOrUndefined()) {
+			parentObjVal = Object::New(isolate);
+			obj->Set(v8str(parentPropName.c_str()), parentObjVal);
+		}
+		LocalObjectHandle parentObj = LocalObjectHandle::Cast(parentObjVal);
+
+		parentObj->SetAccessorProperty(v8str(prop.c_str()), get, set, attribute);
 
 		return true;
 	}
@@ -247,16 +289,17 @@ namespace r2 {
 
 		m_destroyed = true;
 
-		if (m_scripted) {
-			trace t(r2engine::isolate());
-			event e(t.file, t.line, EVT_NAME_DESTROY_ENTITY, true, false);
-			e.data()->write(this);
-			r2engine::get()->dispatchAtFrameStart(&e);
-		} else {
+		// todo: make this first condition only happen if called from JS
+		//if (m_scripted) {
+			//trace t(r2engine::isolate());
+			//event e(t.file, t.line, EVT_NAME_DESTROY_ENTITY, true, false);
+			//e.data()->write(this);
+			//r2engine::get()->dispatchAtFrameStart(&e);
+		//} else {
 			event e = evt(EVT_NAME_DESTROY_ENTITY, true, false);
 			e.data()->write(this);
 			r2engine::get()->dispatchAtFrameStart(&e);
-		}
+		//}
 	}
 
 	void scene_entity::initialize() {
@@ -370,6 +413,16 @@ namespace r2 {
 	void scene_entity::remove_custom_component(const mstring& systemName) {
 		scripted_sys* sys = r2engine::scripted_system(systemName);
 		sys->removeComponentFrom(this);
+	}
+
+	void scene_entity::set_interpolation(const mstring& prop, interpolate::interpolation_transition_mode transition, f32 duration) {
+		auto it = m_propInterpolation->find(prop);
+		if (it != m_propInterpolation->end()) {
+			it->second.mode = transition;
+			it->second.duration = duration;
+		} else {
+			r2Error("Entity '%s' has no interpolatable property '%s'", m_name->c_str(), prop.c_str());
+		}
 	}
 
 	mvector<scene_entity*> scene_entity::children() {
@@ -496,12 +549,33 @@ namespace r2 {
 	}
 
 	void entity_system::_entity_added(scene_entity* entity) {
+		/*
+		if (!r2engine::started()) {
+			initialize_entity(entity);
+			return;
+		}
+		*/
+
 		m_state.enable();
 		m_state->m_uninitializedEntities->push_back(entity);
 		m_state.disable();
 	}
 
 	void entity_system::_entity_removed(scene_entity* entity) {
+		/*
+		if (!r2engine::started()) {
+			m_state.enable();
+			if (m_state->contains_entity(entity->id())) {
+				unbind(entity);
+				m_state->destroy(entity->id());
+			}
+			deinitialize_entity(entity);
+			m_state.disable();
+
+			return;
+		}
+		*/
+
 		m_state.enable();
 		for (auto it = m_state->m_uninitializedEntities->begin(); it != m_state->m_uninitializedEntities->end(); it++) {
 			if ((*it)->id() == entity->id()) {

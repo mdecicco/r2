@@ -32,12 +32,12 @@ namespace r2 {
 		appended(0, m_size);
 	}
 
-	void texture_buffer::create(u32 width, u32 height, u8 channels, texture_type type) {
+	void texture_buffer::create(u32 width, u32 height, u8 channels, texture_type type, bool doZeroData) {
 		if (m_data) delete[] m_data;
 		m_size = width * height * channels * type_bpc[type];
 		m_used = m_size;
 		m_data = new u8[m_size];
-		memset(m_data, 0, m_size);
+		if (doZeroData) memset(m_data, 0, m_size);
 		m_width = width;
 		m_height = height;
 		m_channelCount = channels;

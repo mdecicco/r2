@@ -192,6 +192,13 @@ namespace r2 {
 
 		activate_allocator();
 
+		if (!m_engineData) {
+			// no engine data = not initialized
+			if (m_name) delete m_name;
+			m_name = nullptr;
+			deactivate_allocator(true);
+		}
+
 		r2engine::get()->destroy_all_entities();
 
 		if (m_scripted && !m_scriptState.IsEmpty()) {
@@ -203,30 +210,25 @@ namespace r2 {
 			m_scriptState.Reset();
 		}
 
-		if(m_scene) {
-			r2engine::get()->scenes()->destroy(m_scene);
-			m_scene = nullptr;
-		}
+		if(m_scene) r2engine::get()->scenes()->destroy(m_scene);
+		m_scene = nullptr;
 
-		if (m_engineData) {
-			auto& engineData = *m_engineData;
-			for(auto& data : engineData) {
-				delete data;
-			}
-			delete m_engineData;
-			m_engineData = nullptr;
-		}
+		
+		for (auto it = m_engineData->begin();it != m_engineData->end();it++) delete *it;
+		delete m_engineData;
+		m_engineData = nullptr;
 
 		destroy_periodic_update();
 		destroy_event_receiver();
 
-		if (m_name) { delete m_name; m_name = nullptr; }
+		if (m_name) delete m_name;
+		m_name = nullptr;
 
 		deactivate_allocator(true);
 	}
 
 	engine_state_data* state::get_engine_state_data(u16 factoryIdx) {
-		if (m_engineData->size() == 0) return nullptr;
+		if (!m_engineData || m_engineData->size() == 0) return nullptr;
 		return (*m_engineData)[factoryIdx];
 	}
 

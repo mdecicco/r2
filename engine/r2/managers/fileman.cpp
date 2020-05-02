@@ -20,30 +20,6 @@
 using namespace std;
 
 namespace r2 {
-	engine_state_data* state_container_factory::create() {
-		return (engine_state_data*)new state_containers();
-	}
-
-	state_containers::~state_containers() {
-		if (containers.size() > 0) {
-			r2Warn("State \"%s\" has %lu unreleased data containers at destruction time", m_state->name().c_str(), containers.size());
-			for(auto container : containers) {
-				r2Warn("Destroying unreleased container: %s", container->m_name.c_str());
-				delete container;
-			}
-			containers.clear();
-		}
-
-		if (directories.size() > 0) {
-			r2Warn("State \"%s\" has %lu unreleased directories at destruction time", m_state->name().c_str(), directories.size());
-			for(auto directory : directories) {
-				r2Warn("Destroying unreleased directory info: %s", directory->m_path.c_str());
-				delete directory;
-			}
-			directories.clear();
-		}
-	}
-	
 	i32 _snprintf(char* Out,size_t MaxLen,const char* fmt,...) {
 		//Windows friendly
 		va_list Args;
@@ -56,12 +32,6 @@ namespace r2 {
 		va_end(Args);
 		return r;
 	}
-	bool IsWhitespace(char c) {
-		return c == '\t' || c == ' ';
-	}
-	bool IsNumber(char c) {
-		return isdigit(c);
-	}
 
 	#define ParseInteger(Type, Min, Max, MinFmt, MaxFmt) \
 	{ \
@@ -70,7 +40,7 @@ namespace r2 {
 			r2Error("Failed to parse integer from data container (%s)", m_name.c_str()); \
 			return false; \
 		} \
-		while(IsWhitespace(c)) { \
+		while(isspace(c)) { \
 			if(!read(c)) { \
 				r2Error("Failed to parse integer from data container (%s)", m_name.c_str()); \
 				return false; \
@@ -81,7 +51,7 @@ namespace r2 {
 			if(!read(c)) { r2Error("Failed to parse integer from data container (%s)",m_name.c_str()); return false; } \
 		} \
 		mstring s; \
-		while(IsNumber(c)) { \
+		while(isdigit(c)) { \
 			s += c; \
 			if(!read(c)) { \
 				r2Error("Failed to parse integer from data container (%s)", m_name.c_str()); \
@@ -150,9 +120,10 @@ namespace r2 {
         }
     }
 
+    
 
 	data_container::data_container(FILE* fp, const mstring& name, DATA_MODE mode)
-		: m_name(name), m_mode(mode), m_handle(fp), m_size(0), m_offset(0), m_inState(true) {
+		: m_name(name), m_mode(mode), m_handle(fp), m_size(0), m_offset(0) {
 		m_allocatorId = memory_man::current()->id();
         if (fp) {
             fseek(fp, 0, SEEK_END);
@@ -160,6 +131,7 @@ namespace r2 {
             fseek(fp, 0, SEEK_SET);
         }
 	}
+
     data_container::~data_container() {
     }
 
@@ -269,7 +241,7 @@ namespace r2 {
 			}
 
             //Skip whitespace
-            while(IsWhitespace(c)) {
+            while(isspace(c)) {
 				if(!read(c)) {
 					r2Error("Failed to parse float32 from data container (%s)", m_name.c_str());
 					return false;
@@ -288,7 +260,7 @@ namespace r2 {
             //Parse value
             bool DecimalEncountered = false;
             mstring s;
-            while(IsNumber(c) || (c == '.' && !DecimalEncountered)) {
+            while(isdigit(c) || (c == '.' && !DecimalEncountered)) {
                 if(c == '.') DecimalEncountered = true;
                 s += c;
                 if(!read(c)) {
@@ -325,7 +297,7 @@ namespace r2 {
 			}
 
             //Skip whitespace
-            while(IsWhitespace(c)) {
+            while(isspace(c)) {
 				if(!read(c)) {
 					r2Error("Failed to parse float64 from data container (%s)", m_name.c_str());
 					return false;
@@ -344,7 +316,7 @@ namespace r2 {
             //Parse value
             bool DecimalEncountered = false;
             mstring s;
-            while(IsNumber(c) || (c == '.' && !DecimalEncountered)) {
+            while(isdigit(c) || (c == '.' && !DecimalEncountered)) {
                 if(c == '.') DecimalEncountered = true;
                 s += c;
                 if(!read(c)) {
@@ -558,12 +530,47 @@ namespace r2 {
 	}
 
 
+
+    file_man::file_man() {
+        m_containers = nullptr;
+        m_directories = nullptr;
+    }
+
+    file_man::~file_man() {
+        if (m_containers) {
+            if (m_containers->size() > 0) {
+                r2Warn("File manager has %lu unreleased data containers at destruction time", m_containers->size());
+                for (auto it = m_containers->begin();it != m_containers->end();it++) {
+                    r2Warn("Destroying unreleased container: %s", (*it)->m_name.c_str());
+                    delete *it;
+                }
+            }
+
+            if (m_directories->size() > 0) {
+                r2Warn("File manager has %lu unreleased directories at destruction time", m_directories->size());
+                for (auto it = m_directories->begin();it != m_directories->end();it++) {
+                    r2Warn("Destroying unreleased directory info: %s", (*it)->m_path.c_str());
+                    delete *it;
+                }
+            }
+
+            memory_man::push_current(memory_man::global());
+            delete m_containers;
+            delete m_directories;
+            memory_man::pop_current();
+        }
+    }
+
 	void file_man::initialize() {
-		m_stateData = r2engine::get()->states()->register_state_data_factory<state_containers>(new state_container_factory());
+        memory_man::push_current(memory_man::global());
+        m_containers = new mlist<data_container*>();
+        m_directories = new mvector<directory_info*>();
+        memory_man::pop_current();
 	}
 
 	data_container* file_man::create(DATA_MODE Mode, const mstring& Name) {
-		m_stateData.enable();
+        memory_man::lock();
+        m_lock.lock();
         data_container* c = new data_container(0, Name, Mode);
         if(Name.length() == 0) {
             char addr[32];
@@ -571,8 +578,11 @@ namespace r2 {
             _snprintf(addr, 32, "0x%lX", (intptr_t)c);
             c->m_name = addr;
         }
-        c->m_iterator = m_stateData->containers.insert(m_stateData->containers.end(), c);
-		m_stateData.disable();
+        memory_man::push_current(memory_man::global());
+        c->m_iterator = m_containers->insert(m_containers->end(), c);
+        memory_man::pop_current();
+        m_lock.unlock();
+        memory_man::unlock();
         return c;
     }
     
@@ -583,45 +593,53 @@ namespace r2 {
             return 0;
         }
 
-		m_stateData.enable();
+        memory_man::lock();
+        m_lock.lock();
 
         data_container* c = new data_container(fp, Name.length() == 0 ? File : Name, Mode);
         fseek(fp, 0, SEEK_END);
         c->m_size = ftell(fp);
         fseek(fp, 0, SEEK_SET);
 
-        c->m_iterator = m_stateData->containers.insert(m_stateData->containers.end(), c);
-		m_stateData.disable();
+        memory_man::push_current(memory_man::global());
+        c->m_iterator = m_containers->insert(m_containers->end(), c);
+        memory_man::pop_current();
+        m_lock.unlock();
+        memory_man::unlock();
         return c;
     }
     
 	data_container* file_man::load(const mstring& File, DATA_MODE Mode, const mstring& Name) {
-        FILE* fp = fopen(File.c_str(),"rb+");
-        if(!fp) {
+        FILE* fp = fopen(File.c_str(), "rb+");
+        if (!fp) {
             r2Error("Failed to open file (%s)", File.c_str());
-            return 0;
+            return nullptr;
         }
 
-        fseek(fp,0,SEEK_END);
+        fseek(fp, 0, SEEK_END);
         u32 Sz = ftell(fp);
-        fseek(fp,0,SEEK_SET);
+        fseek(fp, 0, SEEK_SET);
 
 		data_container* c = nullptr;
 
-		m_stateData.enable();
-        if(Sz == 0) {
+        memory_man::lock();
+        m_lock.lock();
+        if (Sz == 0) {
             fclose(fp);
             r2Warn("Loading empty file (%s) into data container (%s)", File.c_str(), Name.length() == 0 ? File.c_str() : Name.c_str());
 
             c = new data_container(0, Name.length() == 0 ? File : Name, Mode);
-            c->m_iterator = m_stateData->containers.insert(m_stateData->containers.end(), c);
+            memory_man::push_current(memory_man::global());
+            c->m_iterator = m_containers->insert(m_containers->end(), c);
+            memory_man::pop_current();
         } else {
             u8* data = new u8[Sz];
-            if(fread(data, Sz, 1, fp) != 1)
-            {
+            if (fread(data, Sz, 1, fp) != 1) {
                 r2Error("Failed to load %u bytes from file (%s) into memory", Sz, File.c_str());
                 fclose(fp);
-                return 0;
+                m_lock.unlock();
+                memory_man::unlock();
+                return nullptr;
             }
 
             c = new data_container(0, Name.length() == 0 ? File : Name, Mode);
@@ -630,10 +648,13 @@ namespace r2 {
             delete [] data;
             fclose(fp);
 
-            c->m_iterator = m_stateData->containers.insert(m_stateData->containers.end(), c);
+            memory_man::push_current(memory_man::global());
+            c->m_iterator = m_containers->insert(m_containers->end(), c);
+            memory_man::pop_current();
         }
 
-		m_stateData.disable();
+        m_lock.unlock();
+        memory_man::unlock();
 		return c;
     }
    
@@ -675,21 +696,28 @@ namespace r2 {
             return 0;
         }
 
-		m_stateData.enable();
         directory_info* dinfo = new directory_info();
 		dinfo->populate(dir);
-		m_stateData->directories.push_back(dinfo);
-		m_stateData.disable();
+        memory_man::lock();
+        m_lock.lock();
+        memory_man::push_current(memory_man::global());
+		m_directories->push_back(dinfo);
+        memory_man::pop_current();
+        m_lock.unlock();
+        memory_man::unlock();
         return dinfo;
     }
 
 	void file_man::destroy_directory(directory_info* dir) {
-		m_stateData.enable();
+        memory_man::lock();
+        m_lock.lock();
 		bool found = false;
-		for(auto i = m_stateData->directories.begin();i != m_stateData->directories.end();i++) {
+		for(auto i = m_directories->begin();i != m_directories->end();i++) {
 			if (*i == dir) {
 				delete dir;
-				m_stateData->directories.erase(i);
+                memory_man::push_current(memory_man::global());
+				m_directories->erase(i);
+                memory_man::pop_current();
 				found = true;
 				break;
 			}
@@ -697,7 +725,8 @@ namespace r2 {
 		if (!found) {
 			r2Error("Could not release directory info, it doesn't exist in this state");
 		}
-		m_stateData.disable();
+        m_lock.unlock();
+        memory_man::unlock();
 	}
 
     bool file_man::exists(const mstring& Item) {
@@ -706,23 +735,31 @@ namespace r2 {
     }
 
 	void file_man::destroy(data_container *container) {
-		if (!container->m_inState) return;
-		container->m_inState = false;
-		m_stateData.enable();
-		m_stateData->containers.erase(container->m_iterator);
-		if(container->m_handle) fclose(container->m_handle);
+        memory_man::lock();
+        m_lock.lock();
+
+        memory_man::push_current(memory_man::global());
+		m_containers->erase(container->m_iterator);
+        memory_man::pop_current();
+		if (container->m_handle) fclose(container->m_handle);
 		container->m_handle = nullptr;
 		delete container;
-		m_stateData.disable();
+
+        m_lock.unlock();
+        memory_man::unlock();
 	}
 
 	void file_man::destroy_nodelete(data_container *container) {
-		if (!container->m_inState) return;
-		container->m_inState = false;
-		m_stateData.enable();
-		m_stateData->containers.erase(container->m_iterator);
+        memory_man::lock();
+        m_lock.lock();
+
+        memory_man::push_current(memory_man::global());
+		m_containers->erase(container->m_iterator);
+        memory_man::pop_current();
 		if(container->m_handle) fclose(container->m_handle);
 		container->m_handle = nullptr;
-		m_stateData.disable();
+
+        m_lock.unlock();
+        memory_man::unlock();
 	}
 }

@@ -146,7 +146,7 @@ namespace r2 {
 		if (entity->is_scripted()) {
 			entity->unbind("add_camera_component");
 
-			entity->bind(component, "projection", &c::projection);
+			entity->bind_interpolatable(component, "projection", &c::projection);
 			entity->bind(component, "active", &c::active, true);
 			entity->bind(this, "update_frustum", [](entity_system* sys, scene_entity* entity, v8Args args) {
 				entity->camera->update_frustum();

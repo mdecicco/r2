@@ -38,7 +38,7 @@ namespace r2 {
 			virtual void* data() const { return m_data; }
 
 			void create(u8* data, u32 width, u32 height, u8 channels, texture_type type);
-			void create(u32 width, u32 height, u8 channels, texture_type type);
+			void create(u32 width, u32 height, u8 channels, texture_type type, bool doZeroData = true);
 
 			void set_pixel(u32 x, u32 y, u8 channel, void* data);
 			void set_pixel(u32 x, u32 y, void* data);

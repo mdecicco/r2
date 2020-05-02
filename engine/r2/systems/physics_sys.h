@@ -1,7 +1,8 @@
 #pragma once
-#include <r2/systems/entity.h>
 #include <btBulletCollisionCommon.h>
 #include <btBulletDynamicsCommon.h>
+
+#include <r2/systems/entity.h>
 
 namespace r2 {
 	class physics_system_state;

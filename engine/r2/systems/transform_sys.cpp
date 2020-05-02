@@ -45,7 +45,7 @@ namespace r2 {
 		using c = transform_component;
 		if (entity->is_scripted()) {
 			entity->unbind("add_transform_component");
-			entity->bind(component, "transform", &c::transform, false, true, &cascade_mat4f, "full_transform");
+			entity->bind_interpolatable(component, "transform", &c::transform, true, &cascade_mat4f, "full_transform");
 			entity->bind(this, "remove_transform_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 				system->removeComponentFrom(entity);
 			});

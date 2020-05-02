@@ -1,6 +1,7 @@
 #include <r2/engine.h>
 #include <r2/managers/renderman.h>
 #include <r2/utilities/texture.h>
+#include <r2/utilities/utils.h>
 
 #include <r2/systems/camera_sys.h>
 #include <r2/systems/transform_sys.h>
@@ -350,6 +351,7 @@ namespace r2 {
 		texture_uniform u = { loc, 1, 0, 0.0f, 0.0f, false, arr };
 		m_textures.push_back(u);
 	}
+	
 	void node_material_instance::set_texture(const mstring& uniformName, const mvector<texture_buffer*>& textures, f32 duration, bool loop) {
 		if (textures.size() == 1) {
 			set_texture(uniformName, textures[0]);
@@ -644,6 +646,53 @@ namespace r2 {
 
 		driver->bind_render_target(m_renderTarget);
 		driver->clear_framebuffer(clearColor, m_renderTarget ? m_renderTarget->depth_mode() != rbdm_no_depth : true);
+
+		lighting_component* lights[16];
+		size_t light_count = lighting_sys::get()->get_lights(16, lights);
+		vec3f light_pos[16];
+		vec3f light_dir[16];
+		vec2f light_angles[16];
+		for (u16 i = 0;i < light_count;i++) {
+			scene_entity* e = lights[i]->entity();
+			if (e->transform) {
+				mat4f t = e->transform->transform;
+				light_pos[i] = t * vec4f(0.0f, 0.0f, 0.0f, 1.0f);
+				light_dir[i] = t * vec4f(0.0f, -1.0f, 0.0f, 1.0f);
+				light_dir[i] = glm::normalize(light_dir[i] - light_pos[i]);
+			} else {
+				light_pos[i] = vec3f(0, 0, 0);
+				light_dir[i] = vec3f(0, 0, 1);
+			}
+
+			light_angles[i].x = cosf(glm::radians(lights[i]->coneInnerAngle));
+			light_angles[i].y = cosf(glm::radians(lights[i]->coneOuterAngle));
+		}
+
+		for (u16 i = 0;i < m_shaders.size();i++) {
+			shader_program* shader = m_shaders[i];
+
+			i32 lc_loc = shader->get_uniform_location("u_light_count");
+			if (lc_loc == -1) continue;
+			i32 lt0_loc = shader->get_uniform_location("u_lights[0].type");
+			if (lt0_loc == -1) continue;
+
+			shader->activate();
+			shader->uniform1i(lc_loc, light_count);
+			for (size_t l = 0;l < light_count;l++) {
+				lighting_component* light = lights[l];
+				mstring base = format_string("u_lights[%d].", l);
+				shader->uniform1i(l == 0 ? lt0_loc : shader->get_uniform_location(base + "type"), light->type);
+				shader->uniform3f(shader->get_uniform_location(base + "position"), light_pos[l].x, light_pos[l].y, light_pos[l].z);
+				shader->uniform3f(shader->get_uniform_location(base + "direction"), light_dir[l].x, light_dir[l].y, light_dir[l].z);
+				shader->uniform3f(shader->get_uniform_location(base + "color"), light->color.x, light->color.y, light->color.z);
+				shader->uniform1f(shader->get_uniform_location(base + "cosConeInnerAngle"), light_angles[l].x);
+				shader->uniform1f(shader->get_uniform_location(base + "cosConeOuterAngle"), light_angles[l].y);
+				shader->uniform1f(shader->get_uniform_location(base + "constantAtt"), light->constantAttenuation);
+				shader->uniform1f(shader->get_uniform_location(base + "linearAtt"), light->linearAttenuation);
+				shader->uniform1f(shader->get_uniform_location(base + "quadraticAtt"), light->quadraticAttenuation);
+			}
+			shader->deactivate();
+		}
 		
 		for (auto node : m_nodes) {
 			node_material_instance* mat = node->material_instance();

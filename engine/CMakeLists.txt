@@ -69,6 +69,7 @@ SET(debug_libs
 	debug/BulletCollision_Debug
 	debug/BulletDynamics_Debug
 	debug/LinearMath_Debug
+	debug/marl
 	OpenAL32
 	opengl32
 )
@@ -86,6 +87,7 @@ SET(release_libs
 	release/BulletCollision
 	release/BulletDynamics
 	release/LinearMath
+	release/marl
 	OpenAL32
 	opengl32
 )

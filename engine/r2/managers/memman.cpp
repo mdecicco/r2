@@ -1,4 +1,4 @@
-#include <r2/engine.h>
+#include <r2/managers/memman.h>
 #include <cstdlib>
 
 namespace r2 {
@@ -63,8 +63,20 @@ namespace r2 {
 
 
 
-	memory_allocator::memory_allocator() : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(0), m_used(0), m_blockCount(0), m_baseBlock(nullptr) {
+	memory_allocator::memory_allocator() :
+		m_last(nullptr),
+		m_next(nullptr),
+		m_base(nullptr),
+		m_size(0),
+		m_used(0),
+		m_blockCount(0),
+		m_baseBlock(nullptr),
+		m_freePoolMem(nullptr),
+		m_emptyFreePools(),
+		m_freePools()
+	{
 		m_id = 1;
+		if (use_malloc) return;
 		m_mergeCounter = 50;
 		m_size_in_free_pools = 0;
 		m_size_in_tracked_pools = 0;
@@ -82,8 +94,9 @@ namespace r2 {
 	}
 
 	memory_allocator::memory_allocator(size_t max_size, size_t max_free_pool_size) : m_last(nullptr), m_next(nullptr), m_base(nullptr), m_size(max_size), m_used(0), m_blockCount(0) {
-		m_last = r2engine::memory()->get_deepest_allocator();
+		m_last = memory_man::get()->get_deepest_allocator();
 		m_last->m_next = this;
+		if (use_malloc) return;
 		m_base = memory_man::global()->allocate(max_size);
 		m_baseBlock = (memory_block*)m_base;
 		m_baseBlock->size = max_size - sizeof(memory_block);
@@ -126,27 +139,33 @@ namespace r2 {
 	}
 
 	memory_allocator::~memory_allocator() {
+		if (use_malloc) return;
 		if (m_last) {
+			memory_man::global()->m_lock.lock();
 			memory_man::global()->deallocate_from_self(m_base);
 			memory_man::global()->deallocate_from_self(m_freePoolMem);
+			memory_man::global()->m_lock.unlock();
 			m_last->m_next = m_next;
 			if (m_next) m_next->m_last = m_last;
 		}
-		printf("allocator destroyed 0x%X\n", (void*)this);
+		printf("allocator destroyed 0x%X\n", (intptr_t)this);
 	}
 
 	void* memory_allocator::allocate(size_t size) {
 		if (use_malloc) return malloc(size);
 
+		m_lock.lock();
 		// check if there is a free block that fits this size
 		void* mem = get_free_list_node(align(size));
-		if (mem) return mem;
+		if (mem) {
+			m_lock.unlock();
+			return mem;
+		}
 
 		memory_block* block = find_available(align(size));
 		if (!block && size > m_size - m_used) {
-			if (m_id == 1) printf("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
-			else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
-
+			printf("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
+			m_lock.unlock();
 			exit(-1);
 			return nullptr;
 		}
@@ -157,6 +176,7 @@ namespace r2 {
 		block->used = m_id;
 
 		purge_unused_tracked_blocks();
+		m_lock.unlock();
 		return ptrFromBlock(block);
 	}
 
@@ -166,11 +186,11 @@ namespace r2 {
 		memory_block* block = blockFromPtr(ptr);
 		if (block->size == size) return ptr;
 		if (block->used == m_id) {
+			m_lock.lock();
 			void* newPtr = reallocate_from_self(ptr, size);
+			m_lock.unlock();
 			if (!newPtr) {
-				if (m_id == 1) printf("Failed to reallocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
-				else r2Error("Failed to allocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
-
+				printf("Failed to reallocate %s bytes from allocator %d, which has %s bytes available\n", format_size(size), m_id, format_size(m_size - m_used));
 				exit(-1);
 				return nullptr;
 			}
@@ -180,16 +200,20 @@ namespace r2 {
 
 		// this allocator didn't allocate ptr... nice
 		if (block->used < m_id && m_last) {
+			m_lock.lock();
 			void* newPtr = m_last->reallocate_called_from_other_allocator(block, ptr, size, m_id);
+			m_lock.unlock();
 			if (newPtr) return newPtr;
 		}
 
 		if (block->used > m_id && m_next) {
+			m_lock.lock();
 			void* newPtr = m_next->reallocate_called_from_other_allocator(block, ptr, size, m_id);
+			m_lock.unlock();
 			if (newPtr) return newPtr;
 		}
 
-		r2Error("Memory leak detected. 0x%X was allocated by allocator %d, which was destroyed. Also, failed to reallocate data\n", ptr, block->used);
+		printf("Memory leak detected. 0x%X was allocated by allocator %d, which was destroyed. Also, failed to reallocate data\n", (intptr_t)ptr, (i32)block->used);
 		exit(-1);
 		return nullptr;
 	}
@@ -200,24 +224,35 @@ namespace r2 {
 			return true;
 		}
 
+		m_lock.lock();
 		memory_block* block = blockFromPtr(ptr);
 		if (block->used == m_id) {
 			deallocate_from_self(ptr);
+			m_lock.unlock();
 			return true;
 		}
 
 		// this allocator didn't allocate ptr... nice
-		if (block->used < m_id && m_last && m_last->deallocate_called_from_other_allocator(block, ptr, m_id)) return true;
-		if (block->used > m_id && m_next && m_next->deallocate_called_from_other_allocator(block, ptr, m_id)) return true;
+		if (block->used < m_id && m_last && m_last->deallocate_called_from_other_allocator(block, ptr, m_id)) {
+			m_lock.unlock();
+			return true;
+		}
+		if (block->used > m_id && m_next && m_next->deallocate_called_from_other_allocator(block, ptr, m_id)) {
+			m_lock.unlock();
+			return true;
+		}
 
-		r2Error("Memory leak detected. 0x%X was allocated by allocator %d, which was destroyed.\n", ptr, block->used);
+		printf("Memory leak detected. 0x%X was allocated by allocator %d, which was destroyed.\n", (intptr_t)ptr, (i32)block->used);
+		m_lock.unlock();
 		return false;
 	}
 
 	void memory_allocator::deallocate_all() {
-		memory_man::push_current(memory_man::global());
+		if (use_malloc) return;
+		m_lock.lock();
+		// Note: This call doesn't deallocate anything.
+		// There's no risk of deadlock due to recursion
 		m_allocTrackers.clear();
-		memory_man::pop_current();
 
 		m_baseBlock = (memory_block*)m_base;
 		m_baseBlock->size = m_size - sizeof(memory_block);
@@ -250,33 +285,12 @@ namespace r2 {
 		}
 
 		memset(ptrFromBlock(m_baseBlock), 0xFC, m_baseBlock->size);
-	}
-
-	void memory_allocator::enable_memory_tracking() {
-		m_tracking_enabled = true;
-	}
-
-	void memory_allocator::disable_memory_tracking() {
-		m_tracking_enabled = false;
-	}
-
-	void memory_allocator::merge_adjacent_blocks() {
-		m_mergeCounter = 50;
-		memory_block* b = m_baseBlock;
-		while(b) {
-			if (!b->used && b->next && !b->next->used) {
-				// merge with next
-				b->size += b->next->size + sizeof(memory_block);
-				b->next = b->next->next;
-				checkSize(b);
-				m_used -= sizeof(memory_block);
-				m_blockCount--;
-			}
-			b = b->next;
-		}
+		m_lock.unlock();
 	}
 
 	void memory_allocator::debug(allocator_id level) {
+		if (use_malloc) return;
+		m_lock.lock();
 		merge_adjacent_blocks();
 
 		struct bucket {
@@ -327,10 +341,63 @@ namespace r2 {
 		}
 
 		if (m_next) m_next->debug(level + 1);
+		m_lock.unlock();
 	}
 
 	allocator_id memory_allocator::id() const {
 		return m_id;
+	}
+
+	size_t memory_allocator::size() {
+		if (use_malloc) return UINT64_MAX;
+		m_lock.lock();
+		size_t ret = m_size;
+		m_lock.unlock();
+		return ret;
+	}
+
+	size_t memory_allocator::used() {
+		if (use_malloc) return 0;
+		m_lock.lock();
+		size_t ret = m_used;
+		m_lock.unlock();
+		return ret;
+	}
+
+	void memory_allocator::slow_check() {
+		memory_block* b = m_baseBlock;
+		size_t i = 0;
+		while(b) {
+			assert(checkSize(b));
+			b = b->next;
+			i++;
+		}
+	}
+
+	/* memory_allocator protected methods */
+
+	void memory_allocator::enable_memory_tracking() {
+		m_tracking_enabled = true;
+	}
+
+	void memory_allocator::disable_memory_tracking() {
+		m_tracking_enabled = false;
+	}
+
+	void memory_allocator::merge_adjacent_blocks() {
+		m_mergeCounter = 50;
+		memory_block* b = m_baseBlock;
+		while(b) {
+			if (!b->used && b->next && !b->next->used) {
+				// merge with next
+				b->size += b->next->size + sizeof(memory_block);
+				b->next = b->next->next;
+				checkSize(b);
+				m_used -= sizeof(memory_block);
+				m_blockCount--;
+			}
+			b = b->next;
+		}
 	}
 
 	void memory_allocator::deallocate_from_self(void* ptr) {
@@ -338,6 +405,7 @@ namespace r2 {
 			free(ptr);
 			return;
 		}
+
 		memory_block* block = blockFromPtr(ptr);
 		assert(block->used == m_id);
 
@@ -383,6 +451,11 @@ namespace r2 {
 	}
 
 	bool memory_allocator::deallocate_called_from_other_allocator(memory_block* block, void* ptr, allocator_id otherAllocatorId) {
+		if (use_malloc) {
+			free(ptr);
+			return true;
+		}
+
 		if (block->used == m_id) {
 			deallocate_from_self(ptr);
 			return true;
@@ -573,8 +646,7 @@ namespace r2 {
 			b = b->next;
 		}
 
-		if (m_id == 1) printf("Failed to find memory for size %s\n", format_size(size));
-		else r2Error("Failed to find memory for size %s\n", format_size(size));
+		printf("Failed to find memory for size %s\n", format_size(size));
 
 		return nullptr;
 	}
@@ -679,30 +751,20 @@ namespace r2 {
 		//printf("%s\n", format_size(m_size_in_tracked_pools));
 	}
 
-	void memory_allocator::slow_check() {
-		memory_block* b = m_baseBlock;
-		size_t i = 0;
-		while(b) {
-			assert(checkSize(b));
-			b = b->next;
-			i++;
-		}
-	}
-
 
 
 	memory_man* memory_man::get() {
-		if (!memory_man::instance) {
-			memory_man::instance = (memory_man*)malloc(sizeof(memory_man));
-			new (memory_man::instance) memory_man();
+		if (!instance) {
+			instance = (memory_man*)malloc(sizeof(memory_man));
+			new (instance) memory_man();
 		}
-		return memory_man::instance;
+		return instance;
 	}
 
 	memory_man::memory_man() {
 		if (log_alloc_sizes) {
 			tfp = fopen("memstat.txt", "w");
-			if (!tfp) printf("Failed to create memstat.txt");
+			if (!tfp) printf("Failed to create memstat.txt\n");
 		}
 
 		FILE* fp = fopen("mem.ini", "rb");
@@ -745,6 +807,8 @@ namespace r2 {
 			fclose(fp);
 		}
 
+		if (use_malloc) m_memSize = 1024;
+
 		m_base = malloc(m_memSize);
 		m_baseAllocator.m_base = m_base;
 		m_baseAllocator.m_size = m_memSize;
@@ -782,79 +846,120 @@ namespace r2 {
 	}
 
 	memory_allocator* memory_man::get_allocator_by_id(allocator_id id) {
+		if (use_malloc) return &instance->m_baseAllocator;
+		m_lock.lock();
 		memory_allocator* s = &m_baseAllocator;
 		while(s) {
-			if (s->m_id == id) return s;
+			if (s->m_id == id) {
+				m_lock.unlock();
+				return s;
+			}
 			s = s->m_next;
 		}
+
+		m_lock.unlock();
 		return nullptr;
 	}
 
 	void memory_man::push_current(memory_allocator* allocator) {
-		if (allocator->id() > 2) {
-			printf("wtf?\n");
-		}
-		allocator_stack* s = (allocator_stack*)memory_man::instance->m_baseAllocator.allocate(sizeof(allocator_stack));
+		if (use_malloc) return;
+		// remains locked until the corresponding pop_current is called
+		instance->m_lock.lock();
+		allocator_stack* s = (allocator_stack*)instance->m_baseAllocator.allocate(sizeof(allocator_stack));
 		s->last = nullptr;
-		s->next = memory_man::instance->m_allocatorStack;
+		s->next = instance->m_allocatorStack;
 		s->allocator = allocator;
-		memory_man::instance->m_allocatorStack->last = s;
-		memory_man::instance->m_allocatorStack = s;
+		instance->m_allocatorStack->last = s;
+		instance->m_allocatorStack = s;
+		// instance->m_lock.unlock();
 	}
 
 	void memory_man::push_current(allocator_id allocatorId) {
-		memory_allocator* allocator = memory_man::instance->get_allocator_by_id(allocatorId);
+		if (use_malloc) return;
+		memory_allocator* allocator = instance->get_allocator_by_id(allocatorId);
 		if (!allocator) {
-			r2Warn("Allocator with ID %d was destroyed or never existed. Using global allocator instead", allocatorId);
+			printf("Allocator with ID %d was destroyed or never existed. Using global allocator instead\n", allocatorId);
 			memory_man::push_current(memory_man::global());
 		} else memory_man::push_current(allocator);
 	}
 
 	memory_allocator* memory_man::pop_current() {
-		allocator_stack* cur = memory_man::instance->m_allocatorStack;
+		if (use_malloc) return &instance->m_baseAllocator;
+		// instance->m_lock.lock();
+		allocator_stack* cur = instance->m_allocatorStack;
 		memory_allocator* allocator = cur->allocator;
 
-		memory_man::instance->m_allocatorStack = cur->next;
-		memory_man::instance->m_allocatorStack->last = nullptr;
-		memory_man::instance->m_baseAllocator.deallocate_from_self(cur);
-		if (memory_man::instance->m_allocatorStack->allocator->id() > 2) {
-			printf("wtf?\n");
-		}
+		instance->m_allocatorStack = cur->next;
+		instance->m_allocatorStack->last = nullptr;
+		instance->m_baseAllocator.m_lock.lock();
+		instance->m_baseAllocator.deallocate_from_self(cur);
+		instance->m_baseAllocator.m_lock.unlock();
+
+		// lock was locked at the corresponding push_current call
+		instance->m_lock.unlock();
 		return allocator;
 	}
 
 	memory_allocator* memory_man::get_deepest_allocator() {
+		if (use_malloc) return &instance->m_baseAllocator;
+		m_lock.lock();
 		memory_allocator* s = &m_baseAllocator;
 		while(s) {
-			if (!s->m_next) return s;
+			if (!s->m_next) {
+				m_lock.unlock();
+				return s;
+			}
 			s = s->m_next;
 		}
-
+		m_lock.unlock();
 		return &m_baseAllocator;
 	}
 
-	memory_allocator* memory_man::current() { return memory_man::instance->m_allocatorStack->allocator; }
+	memory_allocator* memory_man::current() {
+		if (use_malloc) return &instance->m_baseAllocator;
+		instance->m_lock.lock();
+		memory_allocator* allocator = instance->m_allocatorStack->allocator;
+		instance->m_lock.unlock();
+		return allocator;
+	}
 
 	memory_allocator* memory_man::global() {
-		return &memory_man::instance->m_baseAllocator;
+		if (use_malloc) return &instance->m_baseAllocator;
+		instance->m_lock.lock();
+		memory_allocator* allocator = &instance->m_baseAllocator;
+		instance->m_lock.unlock();
+		return allocator;
 	}
 
 	void* memory_man::allocate(size_t size) {
-		return memory_man::get()->m_allocatorStack->allocator->allocate(size);
+		if (use_malloc) return malloc(size);
+		instance->m_lock.lock();
+		void* result = instance->m_allocatorStack->allocator->allocate(size);
+		instance->m_lock.unlock();
+		return result;
 	}
 
 	void* memory_man::reallocate(void* ptr, size_t size) {
-		return memory_man::get()->m_allocatorStack->allocator->reallocate(ptr, size);
+		if (use_malloc) return realloc(ptr, size);
+		instance->m_lock.lock();
+		void* result = instance->m_allocatorStack->allocator->reallocate(ptr, size);
+		instance->m_lock.unlock();
+		return result;
 	}
 
 	void memory_man::deallocate(void* ptr) {
-		memory_man::get()->m_allocatorStack->allocator->deallocate(ptr);
+		if (use_malloc) return free(ptr);
+		instance->m_lock.lock();
+		instance->m_allocatorStack->allocator->deallocate(ptr);
+		instance->m_lock.unlock();
 	}
 
 	void memory_man::debug() {
+		if (use_malloc) return;
 		printf("\n\n\nmemory_man::debug()\n");
-		memory_man::instance->m_baseAllocator.debug(0);
-		memory_allocator* allocator = &memory_man::instance->m_baseAllocator;
+		instance->m_lock.lock();
+		instance->m_baseAllocator.debug(0);
+		memory_allocator* allocator = &instance->m_baseAllocator;
 		while(allocator) {
 			char num[4] = { 0 };
 			snprintf(num, 4, "%d", allocator->m_id);
@@ -868,10 +973,21 @@ namespace r2 {
 			}
 			allocator = allocator->m_next;
 		}
+		instance->m_lock.unlock();
+	}
+	
+	void memory_man::lock() {
+		if (use_malloc) return;
+		instance->m_lock.lock();
+	}
+
+	void memory_man::unlock() {
+		if (use_malloc) return;
+		instance->m_lock.unlock();
 	}
 
 	void* r2alloc(size_t sz) {
-		return memory_man::allocate(sz);
+		return memory_man::get()->allocate(sz);
 	}
 
 	void* r2calloc(size_t count, size_t size) {
@@ -882,22 +998,19 @@ namespace r2 {
 
 	void* r2realloc(void* ptr, size_t sz) {
 		if (!ptr) {
-			r2Warn("Something tried to reasize a null pointer... Returning allocated memory with desired size");
+			printf("Something tried to reasize a null pointer... Returning allocated memory with desired size\n");
 			return r2alloc(sz);
 		}
-		//void* ret = memory_man::get()->allocate(align(sz));
-		//printf("r2alloc(%d:%d): 0x%X\n", sz, align(sz), (u64)ret);
-		//return ret;
-		return memory_man::reallocate(ptr, sz);
+
+		return memory_man::get()->reallocate(ptr, sz);
 	}
 
 	void r2free(void* ptr) {
 		if (!ptr) {
-			r2Warn("Something tried to delete a null pointer...");
+			printf("Something tried to delete a null pointer...\n");
 			return;
 		}
-		//printf("r2free: 0x%X\n", ptr);
-		memory_man::deallocate(ptr);
+		memory_man::get()->deallocate(ptr);
 	}
 
 	const char* format_size(size_t sz) {

@@ -2,40 +2,21 @@
 #include <r2/managers/memman.h>
 #include <r2/managers/engine_state.h>
 
+#include <marl/mutex.h>
+
 namespace v8pp {
 	struct raw_ptr_traits;
 };
 
 namespace r2 {
-	class data_container;
-	class directory_info;
-	class state_container_factory : public engine_state_data_factory {
-		public:
-			state_container_factory() { }
-			~state_container_factory() { }
-
-			virtual engine_state_data* create();
-	};
-
-	class state_containers : public engine_state_data {
-		public:
-			state_containers() { }
-			~state_containers();
-
-			mlist<data_container*> containers;
-			mvector<directory_info*> directories;
-	};
-
-    enum DIR_ENTRY_TYPE
-    {
+    enum DIR_ENTRY_TYPE {
         DET_FILE,
         DET_FOLDER,
         DET_LINK,
         DET_INVALID,
     };
 
-    class directory_entry
-    {
+    class directory_entry {
         public:
             directory_entry() : Type(DET_INVALID) { }
             directory_entry(const directory_entry& o) : Type(o.Type), Name(o.Name), Extension(o.Extension) { }
@@ -60,8 +41,7 @@ namespace r2 {
 			mstring m_path;
     };
 
-    enum DATA_MODE
-    {
+    enum DATA_MODE {
         DM_BINARY,
         DM_TEXT,
     };
@@ -138,7 +118,6 @@ namespace r2 {
             mstring m_name;
             DATA_MODE m_mode;
             id m_iterator;
-			bool m_inState;
 
             /* For streamed data */
             FILE* m_handle;
@@ -153,8 +132,8 @@ namespace r2 {
     class r2engine;
     class file_man {
         public:
-            file_man() { }
-            ~file_man() { }
+            file_man();
+            ~file_man();
 
 			void initialize();
 
@@ -176,6 +155,8 @@ namespace r2 {
 
         protected:
             friend class data_container;
-			engine_state_data_ref<state_containers> m_stateData;
+            mlist<data_container*>* m_containers;
+            mvector<directory_info*>* m_directories;
+            marl::mutex m_lock;
     };
 };
