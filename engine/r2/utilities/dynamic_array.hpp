@@ -171,6 +171,11 @@ namespace r2 {
 				return m_values.at<T>(m_offsets[key]);
 			}
 
+			template <typename T>
+			T* operator[](const K& key) {
+				return m_values.at<T>(m_offsets[key]);
+			}
+
 			bool has(const K& key) {
 				return m_offsets.count(key) > 0;
 			}
@@ -200,6 +205,10 @@ namespace r2 {
 			void clear() {
 				m_values.clear();
 				m_offsets.clear();
+			}
+
+			size_t size() const {
+				return m_values.size();
 			}
 
 			vector<K> keys() const {
@@ -347,6 +356,10 @@ namespace r2 {
 				return m_values.at(m_offsets[key]);
 			}
 
+			T* operator[](const K& key) {
+				return m_values.at(m_offsets[key]);
+			}
+
 			bool has(const K& key) {
 				return m_offsets.count(key) > 0;
 			}
@@ -376,6 +389,10 @@ namespace r2 {
 			void clear() {
 				m_values.clear();
 				m_offsets.clear();
+			}
+
+			size_t size() const {
+				return m_values.size();
 			}
 
 			vector<K> keys() const {
