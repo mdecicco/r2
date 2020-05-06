@@ -17,6 +17,7 @@
 #include <r2/systems/mesh_sys.h>
 #include <r2/systems/physics_sys.h>
 #include <r2/systems/lighting_sys.h>
+#include <r2/systems/animation_sys.h>
 
 #include <r2/utilities/event.h>
 #include <r2/utilities/window.h>
@@ -74,6 +75,7 @@ namespace r2 {
 			static scene* current_scene();
 			static inline f32 fps() { return instance->m_fps; }
 			static bool started() { return instance->m_loopDidStart; }
+			static scene_entity* entity(entityId);
 
 			// description not found
 			bool open_window(i32 w, i32 h, const mstring& title, bool can_resize = false, bool fullscreen = false);

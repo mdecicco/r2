@@ -69,12 +69,12 @@ namespace r2 {
 			m_collisionShape->setUserIndex(refcount);
 			if (refcount == 0) {
 				m_sysState->collisionShapes.remove(m_collisionShape);
-				delete m_collisionShape;
 			}
 			m_collisionShape = nullptr;
 		}
 
 		if (m_motionState) delete m_motionState;
+		m_motionState = nullptr;
 	}
 
 	void physics_component::set_transform(const mat4f& transform) {

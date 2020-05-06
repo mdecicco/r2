@@ -126,24 +126,36 @@ namespace r2 {
 	void event_receiver::destroy_event_receiver() {
 		m_lock.lock();
 		if (m_parent) {
-			m_parent->m_lock.lock();
+			event_receiver* parent = m_parent;
+			parent->m_lock.lock();
 			for(auto i = m_parent->m_children->begin();i != m_parent->m_children->end();i++) {
 				if((*i) == this) {
 					m_parent->m_children->erase(i);
 					m_parent = nullptr;
+					break;
 				}
 			}
-			m_parent->m_lock.unlock();
+			parent->m_lock.unlock();
 		}
 
-		delete m_frameStartEvents;
-		delete m_nextFrameStartEvents;
-		delete m_children;
-		delete m_subscribesTo;
-		m_frameStartEvents = nullptr;
-		m_nextFrameStartEvents = nullptr;
+		if (m_frameStartEvents) {
+			for (auto it = m_frameStartEvents->begin();it != m_frameStartEvents->end();it++) delete *it;
+			delete m_frameStartEvents;
+			m_frameStartEvents = nullptr;
+		}
+
+		if (m_nextFrameStartEvents) {
+			for (auto it = m_nextFrameStartEvents->begin();it != m_nextFrameStartEvents->end();it++) delete *it;
+			delete m_nextFrameStartEvents;
+			m_nextFrameStartEvents = nullptr;
+		}
+
+		if (m_children) delete m_children;
 		m_children = nullptr;
+
+		if (m_subscribesTo) delete m_subscribesTo;
 		m_subscribesTo = nullptr;
+
 		m_lock.unlock();
 	}
 
@@ -162,6 +174,7 @@ namespace r2 {
             if((*i) == child) {
                 m_children->erase(i);
 				child->m_parent = nullptr;
+				m_lock.unlock();
                 return;
             }
         }

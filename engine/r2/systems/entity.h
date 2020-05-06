@@ -57,6 +57,7 @@ namespace r2 {
 	class mesh_component;
 	class physics_component;
 	class lighting_component;
+	class animation_component;
 
 	namespace interpolate {
 		enum interpolation_transition_mode;
@@ -418,6 +419,7 @@ namespace r2 {
 			component_ref<mesh_component*> mesh;
 			component_ref<physics_component*> physics;
 			component_ref<lighting_component*> lighting;
+			component_ref<animation_component*> animation;
 
 		private:
 			friend class r2engine;

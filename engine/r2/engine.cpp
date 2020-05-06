@@ -108,6 +108,7 @@ namespace r2 {
 		r2engine::register_system(mesh_sys::get());
 		r2engine::register_system(physics_sys::get());
 		r2engine::register_system(lighting_sys::get());
+		r2engine::register_system(animation_sys::get());
 
 		logMgr = new log_man();
 		instance = new r2engine(argc, argv);
@@ -174,6 +175,13 @@ namespace r2 {
 		if (currentState) return currentState->getScene();
 
 		return nullptr;
+	}
+
+	scene_entity* r2engine::entity(entityId id) {
+		instance->m_entities.enable();
+		scene_entity* e = instance->m_entities->entities.has(id) ? *instance->m_entities->entities.get(id) : nullptr;
+		instance->m_entities.disable();
+		return e;
 	}
 
 	scripted_sys* r2engine::scripted_system(const mstring& systemName) {
@@ -250,6 +258,9 @@ namespace r2 {
 			delete m_inputMgr;
 			m_inputMgr = nullptr;
 		}
+
+		destroy_event_receiver();
+
 		delete m_scriptMgr; m_scriptMgr = nullptr;	// variable dependencies (based on script usage)
         delete m_stateMgr;  m_stateMgr  = nullptr;	// depends on scene manager
         delete m_sceneMgr;  m_sceneMgr  = nullptr;	// depends on render manager, asset manager
@@ -257,8 +268,6 @@ namespace r2 {
 		delete m_fileMgr;   m_fileMgr   = nullptr;
 		delete m_assetMgr;  m_assetMgr  = nullptr;
 		delete m_audioMgr;  m_audioMgr  = nullptr;
-
-		destroy_event_receiver();
 
 		v8::V8::ShutdownPlatform();
 		glfwTerminate();
