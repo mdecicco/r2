@@ -497,6 +497,16 @@ namespace r2 {
 			mod.set("UniformAttrType", m);
 		}
 
+		// light_type
+		{
+			module m(mod.isolate());
+			m.set_const("none", lt_none);
+			m.set_const("point", lt_point);
+			m.set_const("spot", lt_spot);
+			m.set_const("directional", lt_directional);
+			mod.set("LightType", m);
+		}
+
 		// driver types
 		{
 			module m(mod.isolate());

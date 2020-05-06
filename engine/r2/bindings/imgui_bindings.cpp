@@ -15,7 +15,9 @@ using namespace v8;
 using namespace v8pp;
 using namespace std;
 
-#define v8str(str) v8::String::NewFromUtf8(isolate, str, v8::String::kNormalString, strlen(str))
+#ifndef v8str
+	#define v8str(str) v8::String::NewFromUtf8(isolate, str, v8::String::kNormalString, strlen(str))
+#endif
 
 using namespace r2;
 namespace v8pp {

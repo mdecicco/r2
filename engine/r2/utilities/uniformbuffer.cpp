@@ -318,6 +318,7 @@ namespace r2 {
 			if (!r2engine::get()->renderer()->driver()) { r2Error("The static node uniform format can't be created until a render driver is specified"); }
 			else {
 				nodeFmt.add_attr("transform", uat_mat4f);
+				nodeFmt.add_attr("normal_transform", uat_mat4f);
 			}
 			return &nodeFmt;
 		}

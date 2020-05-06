@@ -24,15 +24,15 @@ namespace r2 {
 			u32 instance_count() const { return m_last_instance_idx; }
 
             vertex_format* vertexFormat() const { return m_vertexFormat; }
-			bool append_vertex_data(void* vdata);
+			bool append_vertex_data(void* vdata, size_t count = 1);
             const void* vertex_data() const { return m_vertices; }
 
             index_type indexType() const { return m_indexType; }
-			bool append_index_data(void* idata);
+			bool append_index_data(void* idata, size_t count = 1);
             const void* index_data() const { return m_indices; }
 
             instance_format* instanceFormat() const { return m_instanceFormat; }
-			bool append_instance_data(void* idata);
+			bool append_instance_data(void* idata, size_t count = 1);
 			bool update_instance(u32 idx, void* idata);
             const void* instance_data() const { return m_instances; }
 

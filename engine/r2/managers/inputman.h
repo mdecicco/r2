@@ -9,6 +9,8 @@ namespace r2 {
 
 			~input_man();
 
+			void scan_devices();
+
 			void poll();
 
 			virtual bool keyPressed(const OIS::KeyEvent& arg);
@@ -43,5 +45,6 @@ namespace r2 {
 			OIS::Keyboard* m_keyboard;
 			OIS::Mouse* m_mouse;
 			mvector<OIS::JoyStick*> m_joysticks;
+			timer m_scanTimer;
 	};
 };

@@ -22,8 +22,9 @@
 	#define chdir _chdir
 #endif
 
-
-#define _CRT_NO_VA_START_VALIDATION
+#ifndef _CRT_NO_VA_START_VALIDATION
+	#define _CRT_NO_VA_START_VALIDATION
+#endif
 
 namespace r2 {
 	typedef intptr_t					word;

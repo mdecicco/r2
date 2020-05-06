@@ -5,6 +5,8 @@
 #include <chrono>
 using namespace std;
 
+#include <marl/mutex.h>
+
 namespace r2 {
     class engine;
 	class event;
@@ -27,5 +29,6 @@ namespace r2 {
 		protected:
 			mvector<log_info> m_lines;
 			std::chrono::high_resolution_clock::time_point m_start;
+			marl::mutex m_lock;
     };
 };

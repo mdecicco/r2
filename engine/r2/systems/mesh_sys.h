@@ -39,7 +39,7 @@ namespace r2 {
 			instance_type* get_instance_data() {
 				if (!m_instance) {
 					r2Error("Attempted to get mesh component's instance data when the mesh doesn't have a valid reference to a node");
-					return;
+					return nullptr;
 				}
 
 				return (instance_type*)m_instance.node()->instance_data(m_instance.id());

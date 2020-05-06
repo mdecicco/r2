@@ -13,16 +13,8 @@ namespace r2 {
 		m_keyboard->setEventCallback(this);
 		//m_mouse = (OIS::Mouse*)m_im->createInputObject(OIS::OISMouse, true);
 		//m_mouse->setEventCallback(this);
-
-		OIS::DeviceList l = m_im->listFreeDevices();
-		for(auto device : l) {
-			if (device.first == OIS::OISJoyStick) {
-				OIS::JoyStick* js = (OIS::JoyStick*)m_im->createInputObject(OIS::OISJoyStick, true, device.second);
-				js->setEventCallback(this);
-				m_joysticks.push_back(js);
-			}
-		}
 	}
+
 	input_man::~input_man() {
 		m_keyboard->setEventCallback(nullptr);
 		m_im->destroyInputObject(m_keyboard);
@@ -38,7 +30,34 @@ namespace r2 {
 		m_keyboard = nullptr;
 	}
 
+	void input_man::scan_devices() {
+		// note: this doesn't work after the first time it's called...
+		// Must find a better input library that doesn't have so many
+		// hecking drawbacks
+
+		if (m_scanTimer > 5.0f || m_scanTimer.stopped()) {
+			m_scanTimer.reset();
+			m_scanTimer.start();
+		} else return;
+		//r2Log("Scanning for input devices...");
+
+		for(auto js : m_joysticks) {
+			js->setEventCallback(nullptr);
+			m_im->destroyInputObject(js);
+		}
+		m_joysticks.clear();
+
+		u8 joystick_count = m_im->getNumberOfDevices(OIS::OISJoyStick);
+		//r2Log("Found %d devices", (i32)joystick_count);
+		for (u8 i = 0;i < joystick_count;i++) {
+			OIS::JoyStick* js = (OIS::JoyStick*)m_im->createInputObject(OIS::OISJoyStick, true);
+			js->setEventCallback(this);
+			m_joysticks.push_back(js);
+		}
+	}
+
 	void input_man::poll() {
+		scan_devices();
 		m_keyboard->capture();
 		//m_mouse->capture();
 		for(auto js : m_joysticks) {

@@ -1,10 +1,12 @@
 #include <r2/engine.h>
+#include <r2/systems/scripted_sys.h>
 #include <stdio.h>
 
 namespace r2 {
 	r2engine* r2engine::instance = nullptr;
 	log_man* r2engine::logMgr = nullptr;
 	mvector<entity_system*> r2engine::systems = mvector<entity_system*>();
+	mvector<scripted_sys*> r2engine::scripted_systems = mvector<scripted_sys*>();
 
 	state_entities::state_entities() {
 		uninitializedEntities = new mvector<scene_entity*>();
@@ -25,10 +27,45 @@ namespace r2 {
 		r2engine::systems.push_back(system);
 	}
 
-	void r2engine::entity_created(scene_entity* entity) {
-		for(entity_system* sys : r2engine::systems) {
-			sys->_entity_added(entity);
+	void r2engine::register_scripted_system(scripted_sys* system) {
+		if (instance->m_stateMgr->m_states.size() > 0) {
+			r2Error("Systems should be registered before any states are created");
+			return;
 		}
+
+		r2engine::scripted_systems.push_back(system);
+		system->_initialize();
+
+		// add system as event listener
+		instance->add_child(system);
+
+		// initialize global state data
+		instance->m_globalStateData.push_back(system->state().factory()->create());
+
+		// initialize system's custom global state data
+		system->scriptedState = instance->m_stateMgr->register_state_data_factory<scripted_system_state>(system->factory);
+		instance->m_globalStateData.push_back(system->factory->create());
+	}
+
+	void r2engine::entity_created(scene_entity* entity) {
+		for(entity_system* sys : r2engine::systems) sys->_entity_added(entity);
+		for(entity_system* sys : r2engine::scripted_systems) sys->_entity_added(entity);
+
+		/*
+		if (!r2engine::instance->m_loopDidStart) {
+			r2engine::instance->m_entities.enable();
+			auto& entities = r2engine::instance->m_entities->entities;
+			auto& updatingEntities = r2engine::instance->m_entities->updatingEntities;
+			
+			if (!entity->parent()) r2engine::instance->add_child(entity);
+			entity->initialize();
+			entities.set(entity->id(), entity);
+			if (entity->doesUpdate()) updatingEntities.set(entity->id(), entity);
+
+			r2engine::instance->m_entities.disable();
+			return;
+		}
+		*/
 
 		auto ref = r2engine::instance->m_entities;
 		ref.enable();
@@ -37,21 +74,17 @@ namespace r2 {
 	}
 
 	void r2engine::entity_destroyed(scene_entity* entity) {
-		for(entity_system* sys : r2engine::systems) {
-			sys->_entity_removed(entity);
-		}
+		for(entity_system* sys : r2engine::systems) sys->_entity_removed(entity);
+		for(entity_system* sys : r2engine::scripted_systems) sys->_entity_removed(entity);
 
 		auto ref = r2engine::instance->m_entities;
 		ref.enable();
 
 		auto& entities = ref->entities;
-		if (entities.has(entity->id())) {
-			entities.remove(entity->id());
-		}
+		if (entities.has(entity->id())) entities.remove(entity->id());
+
 		auto& updatingEntities = ref->updatingEntities;
-		if (updatingEntities.has(entity->id())) {
-			updatingEntities.remove(entity->id());
-		}
+		if (updatingEntities.has(entity->id())) updatingEntities.remove(entity->id());
 
 		bool wasUninitialized = false;
 		for (auto it = ref->uninitializedEntities->begin(); it != ref->uninitializedEntities->end(); it++) {
@@ -70,15 +103,12 @@ namespace r2 {
 	void r2engine::create(int argc, char** argv) {
 		if (instance) return;
 
-		memory_man::current()->slow_check();
 		r2engine::register_system(transform_sys::get());
-		memory_man::current()->slow_check();
 		r2engine::register_system(camera_sys::get());
-		memory_man::current()->slow_check();
 		r2engine::register_system(mesh_sys::get());
-		memory_man::current()->slow_check();
 		r2engine::register_system(physics_sys::get());
-		memory_man::current()->slow_check();
+		r2engine::register_system(lighting_sys::get());
+		r2engine::register_system(animation_sys::get());
 
 		logMgr = new log_man();
 		instance = new r2engine(argc, argv);
@@ -91,6 +121,8 @@ namespace r2 {
 
 		for(entity_system* sys : r2engine::systems) {
 			sys->_initialize();
+
+			// add system as event listener
 			instance->add_child(sys);
 		}
 
@@ -103,6 +135,67 @@ namespace r2 {
 		instance->scripts()->executeFile("./builtin.js");
 	}
 
+	r2engine* r2engine::get() { return instance; }
+
+	v8::Isolate* r2engine::isolate() { return instance->m_scriptMgr->context()->isolate(); }
+
+	const mvector<mstring>& r2engine::args() { return instance->m_args; }
+
+	memory_man* r2engine::memory() { return memory_man::get(); }
+
+	scene_man* r2engine::scenes() { return instance->m_sceneMgr; }
+
+	state_man* r2engine::states() { return instance->m_stateMgr; }
+
+	asset_man* r2engine::assets() { return instance->m_assetMgr; }
+
+	file_man* r2engine::files() { return instance->m_fileMgr; }
+
+	render_man* r2engine::renderer() { return instance->m_renderMgr; }
+
+	script_man* r2engine::scripts() { return instance->m_scriptMgr; }
+
+	input_man* r2engine::input() { return instance->m_inputMgr; }
+
+	audio_man* r2engine::audio() { return instance->m_audioMgr; }
+
+	log_man* r2engine::logs() { return logMgr; }
+
+	interpolation_man* r2engine::interpolation() { return instance->m_interpMgr; }
+
+	r2::window* r2engine::window() { return &instance->m_window; }
+
+	engine_state_data* r2engine::get_engine_state_data(u16 factoryIdx) { return instance->m_globalStateData[factoryIdx]; }
+
+	scene* r2engine::current_scene() {
+		scene* debugScene = instance->m_sceneMgr->get("##debug##");
+		if (debugScene) return debugScene;
+
+		state* currentState = instance->m_stateMgr->current();
+		if (currentState) return currentState->getScene();
+
+		return nullptr;
+	}
+
+	scene_entity* r2engine::entity(entityId id) {
+		instance->m_entities.enable();
+		scene_entity* e = instance->m_entities->entities.has(id) ? *instance->m_entities->entities.get(id) : nullptr;
+		instance->m_entities.disable();
+		return e;
+	}
+
+	scripted_sys* r2engine::scripted_system(const mstring& systemName) {
+		for (scripted_sys* sys : instance->scripted_systems) {
+			if (sys->name == systemName) return sys;
+		}
+
+		r2Error("No system with the name '%s' exists", systemName.c_str());
+		return nullptr;
+	}
+	
+	marl::Scheduler* r2engine::scheduler() {
+		return &instance->m_scheduler;
+	}
 
 
     r2engine::r2engine(int argc,char** argv) : m_platform(v8::platform::NewDefaultPlatform()) {
@@ -125,7 +218,9 @@ namespace r2 {
 		m_sceneMgr = new scene_man();
 		m_scriptMgr = new script_man();
 		m_audioMgr = new audio_man();
+		m_interpMgr = new interpolation_man();
 		m_inputMgr = nullptr;
+		m_loopDidStart = false;
 
 		mstring currentDir = argv[0];
 		currentDir = currentDir.substr(0, currentDir.find_last_of('\\'));
@@ -135,9 +230,14 @@ namespace r2 {
 			glfwTerminate();
 			r2Error("GLFW Could not be initialized!\n");
 		}
+
+		m_scheduler.bind();
+		m_scheduler.setWorkerThreadCount(marl::Thread::numLogicalCPUs());
     }
 
     r2engine::~r2engine() {
+		m_scheduler.unbind();
+
 		m_stateMgr->clearActive();				// depends on script manager, entities
 		m_stateMgr->destroyStates();			// depends on script manager, entities
 
@@ -148,11 +248,19 @@ namespace r2 {
 			remove_child(system);
 			delete system;
 		}
+		for(entity_system* sys : r2engine::scripted_systems) {
+			sys->_deinitialize();
+			remove_child(sys);
+			// should be deleted by the v8 garbage collector
+		}
 
 		if (m_inputMgr) {
 			delete m_inputMgr;
 			m_inputMgr = nullptr;
 		}
+
+		destroy_event_receiver();
+
 		delete m_scriptMgr; m_scriptMgr = nullptr;	// variable dependencies (based on script usage)
         delete m_stateMgr;  m_stateMgr  = nullptr;	// depends on scene manager
         delete m_sceneMgr;  m_sceneMgr  = nullptr;	// depends on render manager, asset manager
@@ -160,8 +268,6 @@ namespace r2 {
 		delete m_fileMgr;   m_fileMgr   = nullptr;
 		delete m_assetMgr;  m_assetMgr  = nullptr;
 		delete m_audioMgr;  m_audioMgr  = nullptr;
-
-		destroy_event_receiver();
 
 		v8::V8::ShutdownPlatform();
 		glfwTerminate();
@@ -255,6 +361,7 @@ namespace r2 {
 	void r2engine::initialize_new_entities() {
 		m_entities.enable();
 		for(entity_system* sys : r2engine::systems) sys->initialize_entities();
+		for(entity_system* sys : r2engine::scripted_systems) sys->initialize_entities();
 
 		auto& uninitializedEntities = *m_entities->uninitializedEntities;
 		auto& entities = m_entities->entities;
@@ -281,6 +388,8 @@ namespace r2 {
 	}
 
     int r2engine::run() {
+		m_loopDidStart = true;
+
 		timer frameTimer; frameTimer.start();
 		f32 last_time = 0.0f;
 
@@ -296,21 +405,24 @@ namespace r2 {
 
 			if (m_inputMgr && m_inputMgr->keyboard()->isKeyDown(OIS::KC_ESCAPE)) break;
 
+			// update value animations
+			m_interpMgr->update();
+
 			// dispatch deferred events
 			frame_started();
-			auto driver = m_renderMgr->driver();
-			driver->clear_framebuffer(vec4f(0.25f, 0.25f, 0.25f, 1.0f), true);
-			driver->set_viewport(vec2i(0, 0), m_window.get_size());
 
 			f32 time_now = frameTimer;
 			f32 dt = time_now - last_time;
 			last_time = time_now;
 			m_fps = 1.0f / dt;
 
+			m_assetMgr->update(dt);
+
 			state* currentState = m_stateMgr->current();
 			if (currentState) currentState->update(dt);
 
 			for(entity_system* sys : r2engine::systems) sys->tick(dt);
+			for(entity_system* sys : r2engine::scripted_systems) sys->tick(dt);
 
 			//timer t;
 			//t.start();
@@ -319,7 +431,10 @@ namespace r2 {
 			//printf("update_entities took %f ms\n", ut * 1000.0f);
 
 			scene* currentScene = current_scene();
+			auto driver = m_renderMgr->driver();
+			driver->set_viewport(vec2i(0, 0), m_window.get_size());
 			if (currentScene) currentScene->render(dt);
+			else driver->clear_framebuffer(vec4f(0.25f, 0.25f, 0.25f, 1.0f), true);
 
 			ImGui_ImplGlfwGL3_NewFrame();
 			if (currentState) currentState->render();

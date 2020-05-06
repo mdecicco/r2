@@ -39,6 +39,18 @@ namespace r2 {
 				return ptr;
 			}
 
+			template <typename T>
+			void push(const T& value) {
+				assert(sizeof(T) == m_elementSize);
+
+				if (m_count == m_capacity) {
+					m_data = (u8*)r2realloc(m_data, m_capacity * 2 * m_elementSize);
+					m_capacity *= 2;
+				}
+
+				memcpy(push(), &value, m_elementSize);
+			}
+
 			template <typename T, typename ... construction_args>
 			T* construct(construction_args ... args) {
 				assert(sizeof(T) == m_elementSize);
@@ -52,6 +64,16 @@ namespace r2 {
 				m_count++;
 
 				return new (ptr) T(args...);
+			}
+
+			void set(size_t index, void* data) {
+				memcpy(m_data + (index * m_elementSize), data, m_elementSize);
+			}
+
+			template <typename T>
+			void set(size_t index, const T& value) {
+				assert(sizeof(T) == m_elementSize);
+				memcpy(m_data + (index * m_elementSize), &value, m_elementSize);
 			}
 
 			void remove(size_t index) {
@@ -123,7 +145,7 @@ namespace r2 {
 				return (T*)(m_data + (index * m_elementSize));
 			}
 
-			inline size_t size() { return m_count; }
+			inline size_t size() const { return m_count; }
 
 			void clear() {
 				m_count = 0;
@@ -152,8 +174,23 @@ namespace r2 {
 			void operator=(const untyped_associative_pod_array&) = delete;
 
 			void* set(const K& key) {
-				m_offsets[key] = m_values.size();
-				return m_values.push();
+				auto it = m_offsets.find(key);
+				if (it == m_offsets.end()) {
+					m_offsets[key] = m_values.size();
+					return m_values.push();
+				}
+
+				return m_values.at(it->second);
+			}
+
+			template <typename T>
+			void set(const K& key, const T& value) {
+				auto it = m_offsets.find(key);
+				if (it != m_offsets.end()) m_values.set(it->second, value);
+				else {
+					m_offsets[key] = m_values.size();
+					return m_values.push();
+				}
 			}
 
 			template <typename T, typename ... construction_args>
@@ -168,6 +205,11 @@ namespace r2 {
 
 			template <typename T>
 			T* get(const K& key) {
+				return m_values.at<T>(m_offsets[key]);
+			}
+
+			template <typename T>
+			T* operator[](const K& key) {
 				return m_values.at<T>(m_offsets[key]);
 			}
 
@@ -200,6 +242,10 @@ namespace r2 {
 			void clear() {
 				m_values.clear();
 				m_offsets.clear();
+			}
+
+			size_t size() const {
+				return m_values.size();
 			}
 
 			vector<K> keys() const {
@@ -254,6 +300,10 @@ namespace r2 {
 
 				new (m_data + m_count) T(args...);
 				m_count++;
+			}
+
+			void set(size_t index, const T& value) {
+				memcpy(m_data + index, &value, sizeof(T));
 			}
 
 			void remove(size_t index) {
@@ -333,8 +383,12 @@ namespace r2 {
 			void operator=(const associative_pod_array&) = delete;
 
 			void set(const K& key, const T& value) {
-				m_offsets[key] = m_values.size();
-				m_values.push(value);
+				auto it = m_offsets.find(key);
+				if (it != m_offsets.end()) m_values.set(it->second, value);
+				else {
+					m_offsets[key] = m_values.size();
+					m_values.push(value);
+				}
 			}
 
 			template <typename ... construction_args>
@@ -344,6 +398,10 @@ namespace r2 {
 			}
 
 			T* get(const K& key) {
+				return m_values.at(m_offsets[key]);
+			}
+
+			T* operator[](const K& key) {
 				return m_values.at(m_offsets[key]);
 			}
 
@@ -376,6 +434,10 @@ namespace r2 {
 			void clear() {
 				m_values.clear();
 				m_offsets.clear();
+			}
+
+			size_t size() const {
+				return m_values.size();
 			}
 
 			vector<K> keys() const {

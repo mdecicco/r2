@@ -56,6 +56,14 @@ namespace r2 {
 	class camera_component;
 	class mesh_component;
 	class physics_component;
+	class lighting_component;
+	class animation_component;
+
+	namespace interpolate {
+		enum interpolation_transition_mode;
+		typedef f32 (*InterpolationFactorCallback)(f32);
+		InterpolationFactorCallback from_enum(interpolation_transition_mode mode);
+	};
 
 	class scene_entity : public event_receiver, public periodic_update {
 		public:
@@ -71,12 +79,15 @@ namespace r2 {
 			inline scene_entity* parent() const { return m_parent; }
 			inline bool doesUpdate() const { return m_doesUpdate; }
 			inline bool has_children() const { return m_children->size() > 0; }
+			Local<Object> script_obj() const;
 
 			/* Functions for scripted entities */
 			void call(const mstring& function, u8 argc = 0, LocalValueHandle* args = nullptr);
 			bool bind(const mstring& function); // find function on entity, make it callable via scene_entity::call
 			bool bind(entity_system* system, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args)); // bind c++ function to entity object
+			bool bind(entity_system* system, const mstring& parentPropName, const mstring& function, void (*callback)(entity_system*, scene_entity*, v8Args)); // bind c++ function to entity object
 			bool bind(scene_entity_component* component, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set = v8::Local<v8::Function>(), v8::PropertyAttribute attribute = v8::PropertyAttribute::None);
+			bool bind(scene_entity_component* component, const mstring& parentPropName, const mstring& prop, v8::Local<v8::Function> get, v8::Local<v8::Function> set = v8::Local<v8::Function>(), v8::PropertyAttribute attribute = v8::PropertyAttribute::None);
 
 			template<typename T, typename U, typename C = U (*)(const U&, const U&)>
 			bool bind(scene_entity_component* component, const mstring& prop, U T::*member, bool readonly = false, bool cascades = false, C cascadeFunc = nullptr, const mstring& cascadedPropName = "") {
@@ -141,6 +152,240 @@ namespace r2 {
 				}
 				return true;
 			}
+			
+			template<typename T, typename U, typename C = U (*)(const U&, const U&)>
+			bool bind(scene_entity_component* component, const mstring& parentPropName, const mstring& prop, U T::*member, bool readonly = false, bool cascades = false, C cascadeFunc = nullptr, const mstring& cascadedPropName = "") {
+				if (!m_scripted) return false;
+				if (!ensure_object_handle()) return false;
+				if (cascades && !cascadeFunc) {
+					r2Error("Property \"%s\" was specified to be cascading, but no cascade function was specified. Property will not have cascaded get accessor", prop.c_str());
+					return false;
+				}
+
+				v8::Isolate* isolate = r2engine::isolate();
+
+				componentId compId = component->id();
+				entity_system* system = component->system();
+
+				size_t offset = (char*)&((T*)nullptr->*member) - (char*)nullptr;
+
+				auto get = v8pp::wrap_function(isolate, nullptr, [system, compId, offset](v8Args args) {
+					v8::Isolate* isolate = args.GetIsolate();
+					auto state = system->state();
+					state.enable();
+					scene_entity_component* component = state->component(compId);
+					U& prop = *(U*)(((u8*)component) + offset);
+					state.disable();
+					args.GetReturnValue().Set(v8pp::convert<U>::to_v8(isolate, prop));
+				});
+
+				v8::Local<v8::Function> set;
+				if (!readonly) {
+					set = v8pp::wrap_function(isolate, nullptr, [system, compId, offset](v8Args args) {
+						v8::Isolate* isolate = args.GetIsolate();
+						auto state = system->state();
+						state.enable();
+						scene_entity_component* component = state->component(compId);
+						U& prop = *(U*)(((u8*)component) + offset);
+						prop = v8pp::convert<U>::from_v8(isolate, args[0]);
+						state.disable();
+						args.GetReturnValue().Set(args[0]);
+					});
+				}
+
+				LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+
+				Local<Value> parentObjVal = obj->Get(v8str(parentPropName.c_str()));
+				if (parentObjVal.IsEmpty() || parentObjVal->IsNullOrUndefined()) {
+					parentObjVal = Object::New(isolate);
+					obj->Set(v8str(parentPropName.c_str()), parentObjVal);
+				}
+				LocalObjectHandle parentObj = LocalObjectHandle::Cast(parentObjVal);
+
+				parentObj->SetAccessorProperty(v8str(prop.c_str()), get, set, readonly ? v8::PropertyAttribute::ReadOnly : v8::PropertyAttribute::None);
+
+				if (cascades) {
+					get = v8pp::wrap_function(isolate, nullptr, [system, compId, member, cascadeFunc](v8Args args) {
+						v8::Isolate* isolate = args.GetIsolate();
+						auto state = system->state();
+						state.enable();
+						scene_entity_component* component = state->component(compId);
+						U result = component->cascaded_property<T, U>(member, cascadeFunc);
+						state.disable();
+						args.GetReturnValue().Set(v8pp::convert<U>::to_v8(isolate, result));
+					});
+
+					mstring name = cascadedPropName;
+					if (name.length() == 0) {
+						name = prop + "_cascaded";
+						r2Warn("No cascaded property name was specified for cascading property \"%s\". Using \"%s\"", prop.c_str(), name.c_str());
+					}
+					parentObj->SetAccessorProperty(v8str(name.c_str()), get, v8::Local<v8::Function>(), v8::PropertyAttribute::ReadOnly);
+				}
+				return true;
+			}
+
+			template<typename T, typename U, typename C = U (*)(const U&, const U&)>
+			bool bind_interpolatable(scene_entity_component* component, const mstring& prop, U T::*member, bool cascades = false, C cascadeFunc = nullptr, const mstring& cascadedPropName = "") {
+				if (!m_scripted) return false;
+				if (!ensure_object_handle()) return false;
+				if (cascades && !cascadeFunc) {
+					r2Error("Property \"%s\" was specified to be cascading, but no cascade function was specified. Property will not have cascaded get accessor", prop.c_str());
+					return false;
+				}
+
+				(*m_propInterpolation)[prop] = prop_interpolate_info({ interpolate::itm_none, 0.0f });
+				v8::Isolate* isolate = r2engine::isolate();
+
+				componentId compId = component->id();
+				entity_system* system = component->system();
+
+				size_t offset = (char*)&((T*)nullptr->*member) - (char*)nullptr;
+
+				auto get = v8pp::wrap_function(isolate, nullptr, [system, compId, offset](v8Args args) {
+					v8::Isolate* isolate = args.GetIsolate();
+					auto state = system->state();
+					state.enable();
+					scene_entity_component* component = state->component(compId);
+					U& prop = *(U*)(((u8*)component) + offset);
+					state.disable();
+					args.GetReturnValue().Set(v8pp::convert<U>::to_v8(isolate, prop));
+				});
+
+				v8::Local<v8::Function> set = v8pp::wrap_function(isolate, nullptr, [this, prop, system, compId, offset](v8Args args) {
+					v8::Isolate* isolate = args.GetIsolate();
+					auto state = system->state();
+					state.enable();
+					scene_entity_component* component = state->component(compId);
+					prop_interpolate_info& interp = m_propInterpolation->at(prop);
+					r2engine::interpolation()->animate((U*)(((u8*)component) + offset), v8pp::convert<U>::from_v8(isolate, args[0]), interp.duration, interpolate::from_enum(interp.mode));
+					state.disable();
+					args.GetReturnValue().Set(args[0]);
+				});
+
+				LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+				obj->SetAccessorProperty(v8str(prop.c_str()), get, set, v8::PropertyAttribute::None);
+
+				if (cascades) {
+					get = v8pp::wrap_function(isolate, nullptr, [system, compId, member, cascadeFunc](v8Args args) {
+						v8::Isolate* isolate = args.GetIsolate();
+						auto state = system->state();
+						state.enable();
+						scene_entity_component* component = state->component(compId);
+						U result = component->cascaded_property<T, U>(member, cascadeFunc);
+						state.disable();
+						args.GetReturnValue().Set(v8pp::convert<U>::to_v8(isolate, result));
+					});
+
+					mstring name = cascadedPropName;
+					if (name.length() == 0) {
+						name = prop + "_cascaded";
+						r2Warn("No cascaded property name was specified for cascading property \"%s\". Using \"%s\"", prop.c_str(), name.c_str());
+					}
+					obj->SetAccessorProperty(v8str(name.c_str()), get, v8::Local<v8::Function>(), v8::PropertyAttribute::ReadOnly);
+				}
+				return true;
+			}
+
+			template<typename T, typename U, typename C = U (*)(const U&, const U&)>
+			bool bind_interpolatable(scene_entity_component* component, const mstring& parentPropName, const mstring& prop, U T::*member, bool cascades = false, C cascadeFunc = nullptr, const mstring& cascadedPropName = "") {
+				if (!m_scripted) return false;
+				if (!ensure_object_handle()) return false;
+				if (cascades && !cascadeFunc) {
+					r2Error("Property \"%s\" was specified to be cascading, but no cascade function was specified. Property will not have cascaded get accessor", prop.c_str());
+					return false;
+				}
+
+				mstring propPath = parentPropName + "." + prop;
+				(*m_propInterpolation)[propPath] = prop_interpolate_info({ interpolate::itm_none, 0.0f });
+
+				v8::Isolate* isolate = r2engine::isolate();
+
+				componentId compId = component->id();
+				entity_system* system = component->system();
+
+				size_t offset = (char*)&((T*)nullptr->*member) - (char*)nullptr;
+
+				auto get = v8pp::wrap_function(isolate, nullptr, [system, compId, offset](v8Args args) {
+					v8::Isolate* isolate = args.GetIsolate();
+					auto state = system->state();
+					state.enable();
+					scene_entity_component* component = state->component(compId);
+					U& prop = *(U*)(((u8*)component) + offset);
+					state.disable();
+					args.GetReturnValue().Set(v8pp::convert<U>::to_v8(isolate, prop));
+				});
+
+				v8::Local<v8::Function> set = v8pp::wrap_function(isolate, nullptr, [this, propPath, system, compId, offset](v8Args args) {
+					v8::Isolate* isolate = args.GetIsolate();
+					auto state = system->state();
+					state.enable();
+					scene_entity_component* component = state->component(compId);
+					prop_interpolate_info& interp = m_propInterpolation->at(propPath);
+					r2engine::interpolation()->animate((U*)(((u8*)component) + offset), v8pp::convert<U>::from_v8(isolate, args[0]), interp.duration, interpolate::from_enum(interp.mode));
+					state.disable();
+					args.GetReturnValue().Set(args[0]);
+				});
+
+				LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+
+				Local<Value> parentObjVal = obj->Get(v8str(parentPropName.c_str()));
+				if (parentObjVal.IsEmpty() || parentObjVal->IsNullOrUndefined()) {
+					parentObjVal = Object::New(isolate);
+					obj->Set(v8str(parentPropName.c_str()), parentObjVal);
+				}
+				LocalObjectHandle parentObj = LocalObjectHandle::Cast(parentObjVal);
+
+				parentObj->SetAccessorProperty(v8str(prop.c_str()), get, set, v8::PropertyAttribute::None);
+
+				if (cascades) {
+					get = v8pp::wrap_function(isolate, nullptr, [system, compId, member, cascadeFunc](v8Args args) {
+						v8::Isolate* isolate = args.GetIsolate();
+						auto state = system->state();
+						state.enable();
+						scene_entity_component* component = state->component(compId);
+						U result = component->cascaded_property<T, U>(member, cascadeFunc);
+						state.disable();
+						args.GetReturnValue().Set(v8pp::convert<U>::to_v8(isolate, result));
+					});
+
+					mstring name = cascadedPropName;
+					if (name.length() == 0) {
+						name = prop + "_cascaded";
+						r2Warn("No cascaded property name was specified for cascading property \"%s\". Using \"%s\"", prop.c_str(), name.c_str());
+					}
+					parentObj->SetAccessorProperty(v8str(name.c_str()), get, v8::Local<v8::Function>(), v8::PropertyAttribute::ReadOnly);
+				}
+				return true;
+			}
+
+			template <typename F>
+			bool bind(const mstring& parentPropName, const mstring& prop, F&& func) {
+				if (!m_scripted) return false;
+				if (!ensure_object_handle()) return false;
+				LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+
+				Local<Value> parentObjVal = obj->Get(v8str(parentPropName.c_str()));
+				if (parentObjVal.IsEmpty() || parentObjVal->IsNullOrUndefined()) {
+					parentObjVal = Object::New(isolate);
+					obj->Set(v8str(parentPropName.c_str()), parentObjVal);
+				}
+
+				LocalObjectHandle parentObj = LocalObjectHandle::Cast(parentObjVal);
+
+				parentObj->Set(v8str(prop.c_str()), v8pp::wrap_function(isolate, prop.c_str(), func));
+				return true;
+			}
+
+			template <typename F>
+			bool bind(const mstring& prop, F&& func) {
+				if (!m_scripted) return false;
+				if (!ensure_object_handle()) return false;
+				LocalObjectHandle obj = LocalObjectHandle::Cast(m_scriptObj.Get(isolate));
+				using F_type = typename std::decay<F>::type;
+				obj->Set(v8str(prop.c_str()), v8pp::wrap_function(isolate, prop.c_str(), std::forward<F_type>(func)));
+				return true;
+			}
 
 			void unbind(const mstring& functionOrProp);
 
@@ -155,6 +400,9 @@ namespace r2 {
 			void destroy();
 			void add_child_entity(scene_entity* entity);
 			void remove_child_entity(scene_entity* entity);
+			void add_custom_component(const mstring& systemName);
+			void remove_custom_component(const mstring& systemName);
+			void set_interpolation(const mstring& prop, interpolate::interpolation_transition_mode transition, f32 duration);
 			mvector<scene_entity*> children();
 			
 			template <typename F>
@@ -170,6 +418,8 @@ namespace r2 {
 			component_ref<camera_component*> camera;
 			component_ref<mesh_component*> mesh;
 			component_ref<physics_component*> physics;
+			component_ref<lighting_component*> lighting;
+			component_ref<animation_component*> animation;
 
 		private:
 			friend class r2engine;
@@ -185,10 +435,16 @@ namespace r2 {
 			virtual void doUpdate(f32 frameDt, f32 updateDt);
 			virtual void belowFrequencyWarning(f32 percentLessThanDesired, f32 desiredFreq, f32 timeSpentLowerThanDesired);
 
+			struct prop_interpolate_info {
+				interpolate::interpolation_transition_mode mode;
+				f32 duration;
+			};
+
 			static entityId nextEntityId;
 			v8::Isolate* isolate;
 			PersistentValueHandle m_scriptObj;
 			munordered_map<mstring, PersistentFunctionHandle>* m_scriptFuncs;
+			munordered_map<mstring, prop_interpolate_info>* m_propInterpolation;
 			mlist<scene_entity*>* m_children;
 			scene_entity* m_parent;
 

@@ -1,7 +1,95 @@
 #include <r2/engine.h>
 #include <r2/systems/camera_sys.h>
+#include <r2/systems/cascade_functions.h>
 
 namespace r2 {
+	camera_frustum::camera_frustum() {
+	}
+
+	camera_frustum::~camera_frustum() {
+	}
+
+	void camera_frustum::set(const mat4f& mvp) {
+		planes[pi_right] = {
+			vec3f(
+				mvp[0][3] + mvp[0][0],
+				mvp[1][3] + mvp[1][0],
+				mvp[2][3] + mvp[2][0]
+			),
+			mvp[3][3] + mvp[3][0]
+		};
+
+		planes[pi_left] = {
+			vec3f(
+				mvp[0][3] - mvp[0][0],
+				mvp[1][3] - mvp[1][0],
+				mvp[2][3] - mvp[2][0]
+			),
+			mvp[3][3] - mvp[3][0]
+		};
+
+		planes[pi_bottom] = {
+			vec3f(
+				mvp[0][3] + mvp[0][1],
+				mvp[1][3] + mvp[1][1],
+				mvp[2][3] + mvp[2][1]
+			),
+			mvp[3][3] + mvp[3][1]
+		};
+
+		planes[pi_top] = {
+			vec3f(
+				mvp[0][3] - mvp[0][1],
+				mvp[1][3] - mvp[1][1],
+				mvp[2][3] - mvp[2][1]
+			),
+			mvp[3][3] - mvp[3][1]
+		};
+
+		planes[pi_far] = {
+			vec3f(
+				mvp[0][2],
+				mvp[1][2],
+				mvp[2][2]
+			),
+			mvp[3][2]
+		};
+
+		planes[pi_near] = {
+			vec3f(
+				mvp[0][3] - mvp[0][2],
+				mvp[1][3] - mvp[1][2],
+				mvp[2][3] - mvp[2][2]
+			),
+			mvp[3][3] - mvp[3][2]
+		};
+
+		auto normalize = [](frustum_plane& p) {
+			f32 imag = 1.0f / glm::length(p.normal);
+			p.normal *= imag;
+			p.distance *= imag;
+		};
+		normalize(planes[0]);
+		normalize(planes[1]);
+		normalize(planes[2]);
+		normalize(planes[3]);
+		normalize(planes[4]);
+		normalize(planes[5]);
+	}
+
+	bool camera_frustum::contains(const vec3f& point, f32 radius) const {
+		f32 nradius = -radius;
+		if (glm::dot(planes[0].normal, point) + planes[0].distance <= nradius) return false;
+		if (glm::dot(planes[1].normal, point) + planes[1].distance <= nradius) return false;
+		if (glm::dot(planes[2].normal, point) + planes[2].distance <= nradius) return false;
+		if (glm::dot(planes[3].normal, point) + planes[3].distance <= nradius) return false;
+		if (glm::dot(planes[4].normal, point) + planes[4].distance <= nradius) return false;
+		if (glm::dot(planes[5].normal, point) + planes[5].distance <= nradius) return false;
+		return true;
+	}
+
+
+
 	camera_component::camera_component() : projection(mat4f(1.0f)), active(false) {
 	}
 
@@ -11,6 +99,15 @@ namespace r2 {
 	void camera_component::activate() {
 		((camera_sys*)system())->activate_camera(entity());
 	}
+
+	void camera_component::update_frustum() {
+		scene_entity* e = entity();
+		mat4f view = mat4f(1.0f);
+		if (e->transform) view = e->transform->cascaded_property(&transform_component::transform, &cascade_mat4f);
+		frustum.set(projection * view);
+	}
+
+
 
 	camera_sys* camera_sys::instance = nullptr;
 	camera_sys::camera_sys() {
@@ -32,7 +129,7 @@ namespace r2 {
 		s.enable();
 		if (!s->contains_entity(entity->id())) {
 			entity->unbind("add_camera_component");
-		}
+		} else entity->unbind("remove_camera_component");
 		s.disable();
 	}
 
@@ -49,8 +146,11 @@ namespace r2 {
 		if (entity->is_scripted()) {
 			entity->unbind("add_camera_component");
 
-			entity->bind(component, "projection", &c::projection);
+			entity->bind_interpolatable(component, "projection", &c::projection);
 			entity->bind(component, "active", &c::active, true);
+			entity->bind(this, "update_frustum", [](entity_system* sys, scene_entity* entity, v8Args args) {
+				entity->camera->update_frustum();
+			});
 			entity->bind(this, "activate", [](entity_system* sys, scene_entity* entity, v8Args args) {
 				((camera_sys*)sys)->activate_camera(entity);
 			});
@@ -64,6 +164,8 @@ namespace r2 {
 	void camera_sys::unbind(scene_entity* entity) {
 		if (entity->is_scripted()) {
 			entity->unbind("camera");
+			entity->unbind("update_frustum");
+			entity->unbind("activate");
 			entity->bind(this, "add_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 				system->addComponentTo(entity);
 			});
@@ -104,7 +206,10 @@ namespace r2 {
 		camera_component* cam = entity->camera.get();
 
 		// do nothing if the camera is already active
-		if (cam->active) return;
+		if (cam->active) {
+			state.disable();
+			return;
+		}
 
 		// set the active camera to inactive, if there is one
 		state->for_each<camera_component>([](camera_component* c) {
@@ -120,5 +225,6 @@ namespace r2 {
 		// activate this one
 		cam->active = true;
 		curScene->camera = entity;
+		state.disable();
 	}
 };

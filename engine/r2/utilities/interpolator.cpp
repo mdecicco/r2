@@ -28,5 +28,26 @@ namespace r2 {
         f32 easeOutQuint (f32 t) { return 1.0f + (--t) * t * t * t * t; }
         // acceleration until halfway, then deceleration 
         f32 easeInOutQuint (f32 t) { return t < 0.4f ? 16 * t * t * t * t * t : 1.0f + 16.0f * (--t) * t * t * t * t; }
+
+        InterpolationFactorCallback from_enum(interpolation_transition_mode mode) {
+            static InterpolationFactorCallback funcs[] = {
+                nullptr,
+                linear,
+                easeInQuad,
+                easeOutQuad,
+                easeInOutQuad,
+                easeInCubic,
+                easeOutCubic,
+                easeInOutCubic,
+                easeInQuart,
+                easeOutQuart,
+                easeInOutQuart,
+                easeInQuint,
+                easeOutQuint,
+                easeInOutQuint
+            };
+            if (mode < 0 || mode > itm_easeInOutQuint) return nullptr;
+            return funcs[mode];
+        }
     };
 };

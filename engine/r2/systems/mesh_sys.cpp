@@ -56,6 +56,132 @@ namespace r2 {
 	}
 
 	void mesh_component::get_instance_data(v8Args args) {
+		if (!m_instance.node()) {
+			r2Error("Attempted to get mesh component's instance data before setting the node that this mesh is an instance of");
+			return;
+		}
+
+		if (!m_instance) {
+			r2Error("Attempted to get mesh component's instance data when the mesh doesn't have a valid reference to a node");
+			return;
+		}
+
+		auto format = m_instance.node()->instances().buffer->format();
+		auto attribs = format->attributes();
+		Local<Array> arr = Array::New(args.GetIsolate(), attribs.size());
+		u8* idata = (u8*)m_instance.node()->instance_data(m_instance.id());
+		for (u32 i = 0;i < attribs.size();i++) {
+			instance_attribute_type t = attribs[i];
+			switch (t) {
+				case iat_int: {
+					i32& val = *(i32*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<i32>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_float: {
+					float& val = *(float*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<float>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_uint: {
+					u32& val = *(u32*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<u32>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec2i: {
+					vec2i& val = *(vec2i*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec2i>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec2f: {
+					vec2f& val = *(vec2f*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec2f>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec2ui: {
+					vec2ui& val = *(vec2ui*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec2ui>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec3i: {
+					vec3i& val = *(vec3i*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec3i>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec3f: {
+					vec3f& val = *(vec3f*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec3f>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec3ui: {
+					vec3ui& val = *(vec3ui*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec3ui>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec4i: {
+					vec4i& val = *(vec4i*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec4i>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec4f: {
+					vec4f& val = *(vec4f*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec4f>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_vec4ui: {
+					vec4ui& val = *(vec4ui*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<vec4ui>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat2i: {
+					mat2i& val = *(mat2i*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat2i>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat2f: {
+					mat2f& val = *(mat2f*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat2f>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat2ui: {
+					mat2ui& val = *(mat2ui*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat2ui>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat3i: {
+					mat3i& val = *(mat3i*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat3i>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat3f: {
+					mat3f& val = *(mat3f*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat3f>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat3ui: {
+					mat3ui& val = *(mat3ui*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat3ui>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat4i: {
+					mat4i& val = *(mat4i*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat4i>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat4f: {
+					mat4f& val = *(mat4f*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat4f>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+				case iat_mat4ui: {
+					mat4ui& val = *(mat4ui*)(idata + format->offsetOf(i));
+					arr->Set(i, v8pp::convert<mat4ui>::to_v8(args.GetIsolate(), val));
+					break;
+				}
+			};
+		}
+
+		args.GetReturnValue().Set(arr);
 	}
 
 	void mesh_component::get_max_vertex_count(v8Args args) {
@@ -340,10 +466,10 @@ namespace r2 {
 
 	void mesh_sys::bind_instance_data(mesh_component* component, scene_entity* entity) {
 		if (!entity->is_scripted()) return;
-		auto get = v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+		auto get = v8pp::wrap_function(r2engine::isolate(), "get_instance", [entity](v8Args args) {
 			entity->mesh->get_instance_data(args);
 		});
-		auto set = v8pp::wrap_function(r2engine::isolate(), nullptr, [entity](v8Args args) {
+		auto set = v8pp::wrap_function(r2engine::isolate(), "set_instance", [entity](v8Args args) {
 			entity->mesh->set_instance_data(args);
 		});
 		entity->bind(component, "instance", get, set);

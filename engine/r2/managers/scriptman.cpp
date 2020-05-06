@@ -69,20 +69,75 @@ namespace r2 {
 
 		mstring trace;
 		if (er->IsUndefined() || er->IsNull()) trace = "(no trace available)";
-		else trace = *String::Utf8Value(isolate, er->ToObject(isolate)->Get(String::NewFromUtf8(isolate, "stack")));
+		else {
+			Local<Object> obj = er->ToObject(isolate);
+			if (obj->IsUndefined()) trace = "(no trace available)";
+			else {
+				Local<Value> tvalue = obj->Get(String::NewFromUtf8(isolate, "stack"));
+				if (tvalue.IsEmpty() || tvalue->IsUndefined()) trace = "(no trace available)";
+				else trace = *String::Utf8Value(isolate, tvalue);
+			}
+		}
 
-		mstring line_str = *String::Utf8Value(isolate, message->GetSourceLine(isolate->GetCurrentContext()).ToLocalChecked());
-		const char* file = *String::Utf8Value(isolate, message->GetScriptResourceName());
-		i32 line = 0;
-		i32 ch = message->GetEndColumn();
-		message->GetLineNumber(isolate->GetCurrentContext()).To(&line);
-		trim(line_str);
+		if (!message.IsEmpty()) {
+			mstring line_str = *String::Utf8Value(isolate, message->GetSourceLine(isolate->GetCurrentContext()).ToLocalChecked());
+			const char* file = *String::Utf8Value(isolate, message->GetScriptResourceName());
+			i32 line = 0;
+			i32 ch = message->GetEndColumn();
+			message->GetLineNumber(isolate->GetCurrentContext()).To(&line);
+			for(u16 i = 0;i < line_str.length();i++) {
+				if (isspace(line_str[i])) ch--;
+				else break;
+			}
+			trim(line_str);
 
-		mstring err = line_str + '\n';
-		for(u16 i = 0;i < ch - 1;i++) err += ' ';
-		err += "^\n";
-		err += trace;
-		r2Error(err.c_str());
+			mstring err = line_str + '\n';
+			for(u16 i = 0;i < ch - 1;i++) err += ' ';
+			err += "^\n";
+			err += trace;
+			r2Error(err.c_str());
+		} else {
+			r2Error("Uh oh: %s", trace.c_str());
+		}
+	}
+	void script_exception(Isolate* isolate, TryCatch& tc) {
+		HandleScope scope(isolate);
+
+		Handle<Value> er = tc.Exception();
+		Handle<Message> message = tc.Message();
+
+		mstring trace;
+		if (er->IsUndefined() || er->IsNull()) trace = "(no trace available)";
+		else {
+			Local<Object> obj = er->ToObject(isolate);
+			if (obj->IsUndefined()) trace = "(no trace available)";
+			else {
+				Local<Value> tvalue = obj->Get(String::NewFromUtf8(isolate, "stack"));
+				if (tvalue.IsEmpty() || tvalue->IsUndefined()) trace = "(no trace available)";
+				else trace = *String::Utf8Value(isolate, tvalue);
+			}
+		}
+
+		if (!message.IsEmpty()) {
+			mstring line_str = *String::Utf8Value(isolate, message->GetSourceLine(isolate->GetCurrentContext()).ToLocalChecked());
+			const char* file = *String::Utf8Value(isolate, message->GetScriptResourceName());
+			i32 line = 0;
+			i32 ch = message->GetEndColumn();
+			message->GetLineNumber(isolate->GetCurrentContext()).To(&line);
+			for(u16 i = 0;i < line_str.length();i++) {
+				if (isspace(line_str[i])) ch--;
+				else break;
+			}
+			trim(line_str);
+
+			mstring err = line_str + '\n';
+			for(u16 i = 0;i < ch - 1;i++) err += ' ';
+			err += "^\n";
+			err += trace;
+			r2Error(err.c_str());
+		} else {
+			r2Error("Uh oh: %s", trace.c_str());
+		}
 	}
 
 	bool check_script_exception(Isolate* isolate, const TryCatch& tc) {
@@ -173,8 +228,8 @@ namespace r2 {
 		m_context->set("require", wrap_function(m_context->isolate(), "require", &js_require));
 	}
 
-	void script_man::execute(const mstring& source) {
-		if (source.length() == 0) return;
+	bool script_man::execute(const mstring& source, v8::Local<v8::Value>* result) {
+		if (source.length() == 0) return false;
 
 		auto isolate = m_context->isolate();
 		Local<Context> context = isolate->GetCurrentContext();
@@ -185,37 +240,69 @@ namespace r2 {
 		Local<Script> script;
 		bool is_valid = Script::Compile(context, convert<mstring>::to_v8(isolate, source), &origin).ToLocal(&script);
 
-		if (try_catch.HasCaught()) script_exception(isolate, try_catch.Exception(), try_catch.Message());
+		if (try_catch.HasCaught()) {
+			script_exception(isolate, try_catch.Exception(), try_catch.Message());
+			return false;
+		}
 
-		if (!is_valid) return;
+		if (!is_valid) return false;
 
 		if (!script.IsEmpty()) {
-			script->Run(context);
-			if (try_catch.HasCaught()) script_exception(isolate, try_catch.Exception(), try_catch.Message());
-		} else r2Error("Command is empty");
+			if (result) {
+				EscapableHandleScope scope(isolate);
+				MaybeLocal<Value> ret = script->Run(context);
+				scope.EscapeMaybe(ret).ToLocal(result);
+			} else script->Run(context);
+
+			if (try_catch.HasCaught()) {
+				script_exception(isolate, try_catch.Exception(), try_catch.Message());
+				return false;
+			}
+		} else {
+			r2Error("Command is empty");
+			return false;
+		}
+
+		return true;
 	}
 
-	void script_man::executeFile(const mstring& file) {
+	bool script_man::executeFile(const mstring& file, v8::Local<v8::Value>* result) {
 		mstring source = get_contents(file);
-		if (source.length() == 0) return;
+		if (source.length() == 0) return false;
 
 		auto isolate = m_context->isolate();
 		Local<Context> context = isolate->GetCurrentContext();
 
 		TryCatch try_catch(isolate);
-		try_catch.SetVerbose(false);
+		try_catch.SetVerbose(true);
 		ScriptOrigin origin(convert<mstring>::to_v8(isolate, file), Local<Integer>::New(isolate, Integer::New(isolate, 0)));
 		Local<Script> script;
 		bool is_valid = Script::Compile(context, convert<mstring>::to_v8(isolate, source), &origin).ToLocal(&script);
 
-		if (try_catch.HasCaught()) script_exception(isolate, try_catch.Exception(), try_catch.Message());
+		if (try_catch.HasCaught()) {
+			script_exception(isolate, try_catch);
+			return false;
+		}
 
-		if (!is_valid) return;
+		if (!is_valid) return false;
 
 		if (!script.IsEmpty()) {
-			script->Run(context);
-			if (try_catch.HasCaught()) script_exception(isolate, try_catch.Exception(), try_catch.Message());
-		} else r2Error("Script \"%s\" is empty", file.c_str());
+			if (result) {
+				EscapableHandleScope scope(isolate);
+				MaybeLocal<Value> ret = script->Run(context);
+				scope.EscapeMaybe(ret).ToLocal(result);
+			} else script->Run(context);
+
+			if (try_catch.HasCaught()) {
+				script_exception(isolate, try_catch);
+				return false;
+			}
+		} else {
+			r2Error("Script \"%s\" is empty", file.c_str());
+			return false;
+		}
+
+		return true;
 	}
 
 

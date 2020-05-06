@@ -1,4 +1,5 @@
 #include <r2/bindings/v8helpers.h>
+#include <r2/managers/scriptman.h>
 
 using namespace v8;
 using namespace std;
@@ -31,7 +32,9 @@ namespace r2 {
 			auto JSON = global->Get(v8str("JSON"))->ToObject(isolate);
 			auto JSON_stringify = Handle<Function>::Cast(JSON->Get(v8str("stringify")));
 			Local<Value> param[1] = { value };
+			TryCatch tc(isolate);
 			JSON_stringify->Call(context, JSON, 1, param).ToLocal(&result);
+			if (!check_script_exception(isolate, tc)) return "";
 		}
 		return *String::Utf8Value(isolate, result);
 	}

@@ -12,9 +12,25 @@ namespace r2 {
 		asf_stereo_16bit = AL_FORMAT_STEREO16
 	};
 
+	class audio_buffer {
+		public:
+			audio_buffer();
+			~audio_buffer();
+
+			inline const f32 duration() const { return m_duration; }
+			inline const ALuint bufferId() const { return m_buffer; }
+
+			bool fill(audio_source_format format, void* data, size_t data_size, size_t sampleRate);
+
+		protected:
+			ALuint m_buffer;
+			f32 m_duration;
+	};
+	
+	#define NO_AUDIO_BUFFER ((audio_buffer*)0xDEADBEEF)
 	class audio_source {
 		public:
-			audio_source();
+			audio_source(audio_buffer* buf = nullptr);
 			~audio_source();
 
 			void setPitch(f32 pitch);
@@ -27,6 +43,7 @@ namespace r2 {
 			void setConeOuterGain(f32 gain);
 			void setConeInnerAngle(f32 angle);
 			void setConeOuterAngle(f32 angle);
+			void setPlayPosition(f32 time);
 			void setPosition(const vec3f& pos);
 			void setVelocity(const vec3f& vel);
 			void setDirection(const vec3f& dir);
@@ -46,9 +63,11 @@ namespace r2 {
 			inline const vec3f velocity() const { return m_velocity; }
 			inline const vec3f direction() const { return m_direction; }
 			inline const bool doesLoop() const { return m_loops; }
-			inline const f32 duration() const { return m_duration; }
+			inline const f32 duration() const { return m_buffer->duration(); }
+			inline audio_buffer* const buffer() const { return m_buffer; }
 
 			bool buffer(audio_source_format format, void* data, size_t data_size, size_t sampleRate);
+			void buffer(audio_buffer* buffer);
 
 			void play();
 			void pause();
@@ -75,9 +94,9 @@ namespace r2 {
 			vec3f m_direction;
 			bool m_loops;
 
-			f32 m_duration;
 			ALuint m_source;
-			ALuint m_buffer;
+			audio_buffer* m_buffer;
+			bool m_allocatedOwnBuffer;
 	};
 
 	class audio_man {

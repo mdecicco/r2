@@ -25,6 +25,8 @@ namespace r2 {
 	}
 
 	void fly_camera_entity::onUpdate(f32 frameDt, f32 updateDt) {
+		if (!camera->is_active()) return;
+
 		time += updateDt;
 		vec2f screen = r2engine::get()->window()->get_size();
 		camera->projection = glm::perspective(glm::radians(90.0f), screen.x / screen.y, 0.1f, 1000.0f);
@@ -59,7 +61,10 @@ namespace r2 {
 				changed = true;
 			}
 
-			if (changed) transform->transform = glm::translate(j_rot, j_pos);
+			if (changed) {
+				transform->transform = glm::translate(j_rot, j_pos);
+				camera->update_frustum();
+			}
 		}
 	}
 };

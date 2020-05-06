@@ -4,7 +4,7 @@ namespace r2 {
 	periodic_update::periodic_update() : m_averageUpdateDuration(nullptr), m_updateFrequency(0.0f) { }
 
 	periodic_update::~periodic_update() {
-		if (m_averageUpdateDuration) delete m_averageUpdateDuration;
+		destroy_periodic_update();
 	}
 
 	void periodic_update::initialize_periodic_update(u32 maxAverageDurSamples) {

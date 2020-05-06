@@ -37,9 +37,10 @@ namespace r2 {
 			size_t unused_size() const;
 			size_t max_size() const;
 
-        protected:
 			void appended(size_t begin, size_t end);
 			void updated(size_t begin, size_t end);
+
+        protected:
             size_t m_id;
 			size_t m_size;
 			size_t m_used;

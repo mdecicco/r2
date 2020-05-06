@@ -5,6 +5,7 @@ namespace r2 {
 	void __set_temp_engine_state_ref(state* s) {
 		temp_state_ref = s;
 	}
+
 	void __enable_state_mem() {
 		state* current = temp_state_ref ? temp_state_ref : r2engine::get()->states()->current();
 		if (!current || current == TEMP_STATE_REF__ENGINE) {
@@ -29,5 +30,9 @@ namespace r2 {
 		state* current = temp_state_ref ? temp_state_ref : r2engine::get()->states()->current();
 		if (!current || current == TEMP_STATE_REF__ENGINE) return r2engine::get()->get_engine_state_data(factoryIdx);
 		return current->get_engine_state_data(factoryIdx);
+	}
+
+	engine_state_data_factory* __get_state_factory(u16 factoryIdx) {
+		return r2engine::states()->factory(factoryIdx);
 	}
 };

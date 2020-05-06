@@ -104,6 +104,7 @@ namespace r2 {
 				m_engineStateDataFactories.push_back(factory);
 				return ref;
 			}
+			engine_state_data_factory* factory(u16 factoryIdx);
 			void initialize_state_engine_data(state* s);
 
 			void activate(const mstring& name);

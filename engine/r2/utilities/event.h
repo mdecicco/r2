@@ -1,8 +1,9 @@
 #pragma once
 #include <r2/bindings/bindings.h>
 #include <r2/managers/memman.h>
-
 #include <r2/bindings/v8helpers.h>
+
+#include <marl/mutex.h>
 
 #define evt(name,...) event(__FILE__, __LINE__, name, ##__VA_ARGS__)
 
@@ -60,6 +61,7 @@ namespace r2 {
     class event_receiver {
         public:
             event_receiver(memory_allocator* memory = nullptr);
+            event_receiver(const event_receiver& o);
             virtual ~event_receiver();
 
 			void initialize_event_receiver();
@@ -80,6 +82,8 @@ namespace r2 {
 			virtual void handle(event* evt) = 0;
 
         private:
+            void _dispatch(event* evt);
+
 			bool m_isAtFrameStart;
 			memory_allocator* m_memory;
 			mvector<event*>* m_frameStartEvents;
@@ -87,5 +91,9 @@ namespace r2 {
             mlist<event_receiver*>* m_children;
 			mlist<mstring>* m_subscribesTo;
 			event_receiver* m_parent;
+
+            // marl suggests not using non-marl blocking functions, but
+            // recursive mutexes are absolutely required in this context
+            recursive_mutex m_lock;
     };
 };

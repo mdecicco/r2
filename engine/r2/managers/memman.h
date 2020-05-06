@@ -1,14 +1,16 @@
 #pragma once
-#include <r2/config.h>
 #include <memory>
 #include <vector>
 #include <string>
 #include <unordered_map>
 #include <list>
 #include <stdio.h>
+
+#include <r2/config.h>
 #include <r2/utilities/robin_hood.h>
 #include <r2/utilities/timer.h>
 #include <r2/utilities/dynamic_array.hpp>
+#include <mutex>
 
 namespace r2 {
 	#define KBtoB(s) (s * 1024)
@@ -58,22 +60,22 @@ namespace r2 {
 			void* reallocate(void* ptr, size_t size);
 			bool deallocate(void* ptr);
 			void deallocate_all();
-			void enable_memory_tracking();
-			void disable_memory_tracking();
-
-			void merge_adjacent_blocks();
 
 			void debug(allocator_id level);
 			allocator_id id() const;
 
-			size_t size() const { return m_size; }
-			size_t used() const { return m_used; }
+			size_t size();
+			size_t used();
 
 			void slow_check();
 
 		protected:
 			friend class memory_man;
 			memory_allocator();
+
+			void merge_adjacent_blocks();
+			void enable_memory_tracking();
+			void disable_memory_tracking();
 			void deallocate_from_self(void* ptr);
 			void deallocate_block(memory_block* block);
 			bool deallocate_called_from_other_allocator(memory_block* block, void* ptr, allocator_id otherAllocatorId);
@@ -107,6 +109,10 @@ namespace r2 {
 			bool m_tracking_enabled;
 			timer m_clean_tracked_timer;
 			robin_hood::unordered_map<size_t, frequency_track> m_allocTrackers;
+
+			// marl suggests not using non-marl blocking functions, but
+			// recursive mutexes are absolutely required in this context
+			recursive_mutex m_lock;
 	};
 
 	class memory_man {
@@ -127,6 +133,9 @@ namespace r2 {
 
 			static void debug();
 
+			static void lock();
+			static void unlock();
+
 		protected:
 			friend class memory_allocator;
 			memory_allocator* get_allocator_by_id(allocator_id id);
@@ -144,8 +153,11 @@ namespace r2 {
 
 			void* m_base;
 			memory_allocator m_baseAllocator;
-
 			allocator_stack* m_allocatorStack;
+			
+			// marl suggests not using non-marl blocking functions, but
+			// recursive mutexes are absolutely required in this context
+			recursive_mutex m_lock;
 	};
 
 	void* r2alloc(size_t sz);

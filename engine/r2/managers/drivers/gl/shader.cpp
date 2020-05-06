@@ -1,6 +1,7 @@
 #include <r2/managers/drivers/gl/driver.h>
 #include <r2/engine.h>
 #include <r2/utilities/gl3w.h>
+#include <r2/utilities/utils.h>
 
 namespace r2 {
 	GLuint load_and_compile_shader(const char* src, GLenum shaderType) {
@@ -50,9 +51,12 @@ namespace r2 {
 	}
 
 	gl_shader_program::gl_shader_program() {
+		m_program = 0;
 	}
 
 	gl_shader_program::~gl_shader_program() {
+		if (m_program) glDeleteProgram(m_program);
+		m_program = 0;
 	}
 
 	bool gl_shader_program::deserialize(const unsigned char* data, size_t length) {
@@ -60,13 +64,54 @@ namespace r2 {
 		contents.resize(length);
 		memcpy(&contents[0], data, length);
 
+		mstring default_code = "";
+		default_code += format_string("#define LIGHT_TYPE_NONE %d\n", lt_none);
+		default_code += format_string("#define LIGHT_TYPE_POINT %d\n", lt_point);
+		default_code += format_string("#define LIGHT_TYPE_SPOT %d\n", lt_spot);
+		default_code += format_string("#define LIGHT_TYPE_DIRECTIONAL %d\n", lt_directional);
+		default_code += "struct LightSource { int type; vec3 position; vec3 direction; vec3 color; float cosConeInnerAngle; float cosConeOuterAngle; float constantAtt; float linearAtt; float quadraticAtt; };\n";
+
 		u32 vIdx = 0;
 		u32 fIdx = contents.find("// fragment");
 		mstring vert = contents.substr(0, fIdx);
 		mstring frag = contents.substr(fIdx);
 
-		m_program = create_program(vert.c_str(), frag.c_str());
-		return m_program > 0;
+		size_t v_vd = vert.find("#version");
+		if (v_vd == mstring::npos) vert = default_code + vert;
+		else {
+			size_t insert_at = vert.find_first_of('\n', v_vd) + 1;
+			vert.insert(insert_at, default_code);
+		}
+		
+		size_t f_vd = frag.find("#version");
+		if (f_vd == mstring::npos) frag = default_code + frag;
+		else {
+			size_t insert_at = frag.find_first_of('\n', f_vd) + 1;
+			frag.insert(insert_at, default_code);
+		}
+
+
+		GLuint prog = create_program(vert.c_str(), frag.c_str());
+		if (prog == 0) return false;
+		if (m_program) {
+			glDeleteProgram(m_program);
+
+			for (auto it = m_uniformBlocks.begin();it != m_uniformBlocks.end();it++) {
+				u32 idx = 0;
+				glCall(idx = glGetUniformBlockIndex(prog, it->first.c_str()));
+				if (idx == GL_INVALID_INDEX) {
+					// r2Error("Failed to find uniform block \"%s\" in shader.", name.c_str());
+					m_uniformBlocks[it->first] = { GL_INVALID_INDEX, GL_INVALID_INDEX };
+				} else {
+					u32 bindingIdx = m_uniformBlocks.size();
+					glCall(glUniformBlockBinding(prog, idx, bindingIdx));
+					m_uniformBlocks[it->first] = { idx, bindingIdx };
+					r2Log("%s: Block binding for '%s' updated to (%d, %d)", m_name.c_str(), it->first.c_str(), idx, bindingIdx);
+				}
+			}
+		}
+		m_program = prog;
+		return true;
 	}
 
 	bool gl_shader_program::serialize(unsigned char** data, size_t* length) {

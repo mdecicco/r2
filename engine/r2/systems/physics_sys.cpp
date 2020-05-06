@@ -65,12 +65,16 @@ namespace r2 {
 		}
 
 		if (m_collisionShape) {
-			m_sysState->collisionShapes.remove(m_collisionShape);
-			delete m_collisionShape;
+			i32 refcount = m_collisionShape->getUserIndex() - 1;
+			m_collisionShape->setUserIndex(refcount);
+			if (refcount == 0) {
+				m_sysState->collisionShapes.remove(m_collisionShape);
+			}
 			m_collisionShape = nullptr;
 		}
 
 		if (m_motionState) delete m_motionState;
+		m_motionState = nullptr;
 	}
 
 	void physics_component::set_transform(const mat4f& transform) {
@@ -93,12 +97,42 @@ namespace r2 {
 
 	void physics_component::set_shape(btCollisionShape* shape) {
 		bool dynamic = m_mass != 0.0f;
-		mat4f transform = entity()->transform->cascaded_property(&transform_component::transform, &cascade_mat4f);
-		f32 sx = glm::length(vec3f(transform[0]));
-		f32 sy = glm::length(vec3f(transform[1]));
-		f32 sz = glm::length(vec3f(transform[2]));
+
+		if (m_collisionShape) {
+			i32 refcount = m_collisionShape->getUserIndex() - 1;
+			m_collisionShape->setUserIndex(refcount);
+			if (refcount == 0) m_sysState->collisionShapes.remove(m_collisionShape);
+
+			if (shape) {
+				refcount = shape->getUserIndex();
+				if (refcount == -1) {
+					refcount = 0;
+					m_sysState->collisionShapes.push_back(shape);
+				}
+				refcount++;
+				shape->setUserIndex(refcount);
+			}
+
+			m_collisionShape = shape;
+		}
+
 		if (shape) {
+			mat4f transform = entity()->transform->cascaded_property(&transform_component::transform, &cascade_mat4f);
+			f32 sx = glm::length(vec3f(transform[0]));
+			f32 sy = glm::length(vec3f(transform[1]));
+			f32 sz = glm::length(vec3f(transform[2]));
 			shape->setLocalScaling(btVector3(sx, sy, sz));
+		} else {
+			if (m_rigidBody) {
+				m_sysState->world->removeRigidBody(m_rigidBody);
+				delete m_rigidBody;
+				m_rigidBody = nullptr;
+			}
+
+			if (m_motionState) delete m_motionState;
+			m_motionState = nullptr;
+
+			return;
 		}
 
 		if (m_rigidBody) {
@@ -106,38 +140,19 @@ namespace r2 {
 			if (dynamic && shape->getShapeType() != EMPTY_SHAPE_PROXYTYPE) shape->calculateLocalInertia(m_mass, inertia);
 			m_rigidBody->setCollisionShape(shape);
 			m_rigidBody->setMassProps(m_mass, inertia);
-
-			if (!m_collisionShape) {
-				m_collisionShape = shape;
-				m_sysState->collisionShapes.push_back(shape);
-				return;
+		} else {
+			m_motionState = new motion_state(entity());
+			
+			btVector3 inertia(0.0f, 0.0f, 0.0f);
+			if (dynamic && m_collisionShape->getShapeType() != EMPTY_SHAPE_PROXYTYPE) {
+				m_collisionShape->calculateLocalInertia(m_mass, inertia);
 			}
+
+			btRigidBody::btRigidBodyConstructionInfo rbInfo(m_mass, m_motionState, m_collisionShape, inertia);
+			m_rigidBody = new btRigidBody(rbInfo);
+
+			m_sysState->world->addRigidBody(m_rigidBody);
 		}
-
-		if (m_collisionShape) {
-			i32 idx = m_sysState->collisionShapes.findBinarySearch(m_collisionShape);
-			bool replace = idx == m_sysState->collisionShapes.size();
-			if (!replace) m_sysState->collisionShapes.remove(m_collisionShape);
-			delete m_collisionShape;
-			m_collisionShape = shape;
-			if (replace) m_sysState->collisionShapes[idx] = shape;
-			else m_sysState->collisionShapes.push_back(shape);
-
-			if (m_rigidBody) return;
-		}
-
-		m_motionState = new motion_state(entity());
-
-		m_collisionShape = shape;
-		m_sysState->collisionShapes.push_back(shape);
-
-		btVector3 inertia(0.0f, 0.0f, 0.0f);
-		if (dynamic && m_collisionShape->getShapeType() != EMPTY_SHAPE_PROXYTYPE) m_collisionShape->calculateLocalInertia(m_mass, inertia);
-
-		btRigidBody::btRigidBodyConstructionInfo rbInfo(m_mass, m_motionState, m_collisionShape, inertia);
-		m_rigidBody = new btRigidBody(rbInfo);
-
-		m_sysState->world->addRigidBody(m_rigidBody);
 	}
 
 	void physics_component::set_mass(f32 mass) {
@@ -168,12 +183,14 @@ namespace r2 {
 			delete obj;
 		}
 
+		/*
 		for (i32 i = 0;i < collisionShapes.size();i++) {
 			btCollisionShape* s = collisionShapes[i];
 			collisionShapes[i] = nullptr;
 			delete s;
 		}
 		collisionShapes.clear();
+		*/
 
 		delete world;
 		delete constraintSolver;
