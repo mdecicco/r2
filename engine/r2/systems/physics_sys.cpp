@@ -97,26 +97,25 @@ namespace r2 {
 
 	void physics_component::set_shape(btCollisionShape* shape) {
 		bool dynamic = m_mass != 0.0f;
+		if (shape == m_collisionShape) return;
 
 		if (m_collisionShape) {
 			i32 refcount = m_collisionShape->getUserIndex() - 1;
 			m_collisionShape->setUserIndex(refcount);
 			if (refcount == 0) m_sysState->collisionShapes.remove(m_collisionShape);
-
-			if (shape) {
-				refcount = shape->getUserIndex();
-				if (refcount == -1) {
-					refcount = 0;
-					m_sysState->collisionShapes.push_back(shape);
-				}
-				refcount++;
-				shape->setUserIndex(refcount);
-			}
-
-			m_collisionShape = shape;
 		}
 
+		m_collisionShape = shape;
+
 		if (shape) {
+			i32 refcount = shape->getUserIndex();
+			if (refcount == -1) {
+				refcount = 0;
+				m_sysState->collisionShapes.push_back(shape);
+			}
+			refcount++;
+			shape->setUserIndex(refcount);
+
 			mat4f transform = entity()->transform->cascaded_property(&transform_component::transform, &cascade_mat4f);
 			f32 sx = glm::length(vec3f(transform[0]));
 			f32 sy = glm::length(vec3f(transform[1]));
