@@ -9,6 +9,84 @@ namespace r2 {
 	}
 
 
+
+	animation_sync::animation_sync() {
+		m_loops = false;
+		m_playing = false;
+		m_duration = 0.0f;
+		m_time = 0.0f;
+	}
+
+	animation_sync::~animation_sync() {
+	}
+
+	void animation_sync::add(animation_group* anim) {
+		if (anim->m_sync) return;
+		anim->m_sync = this;
+
+		m_anims.push_back(anim);
+		if (anim->duration() > m_duration) m_duration = anim->duration();
+	}
+
+	void animation_sync::remove(animation_group* anim) {
+		if (anim->m_sync != this) return;
+
+		f32 max_dur = 0.0f;
+		for (auto it = m_anims.begin();it != m_anims.end();it++) {
+			if ((*it) == anim) {
+				auto n = std::next(it);
+				m_anims.erase(it);
+				anim->m_sync = nullptr;
+				it = n;
+			}
+
+			if (it == m_anims.end()) break;
+			if ((*it)->duration() > max_dur) max_dur = (*it)->duration();
+		}
+
+		m_duration = max_dur;
+	}
+
+	void animation_sync::update_duration() {
+		m_duration = 0.0f;
+		for (auto it = m_anims.begin();it != m_anims.end();it++) {
+			animation_group* g = *it;
+			if (g->duration() > m_duration) m_duration = g->duration();
+		}
+	}
+
+	void animation_sync::update(f32 dt) {
+		if (m_willPauseNextFrame) {
+			m_playing = false;
+			m_time = 0.0f;
+			return;
+		}
+		if (!m_playing) return;
+
+		m_time += dt;
+		if (m_time > m_duration) {
+			m_time = m_duration;
+			m_willPauseNextFrame = !m_loops;
+		}
+	}
+
+	void animation_sync::set_time(f32 time) {
+		if (time > m_duration) m_time = m_duration;
+		else if (time < 0.0f) m_time = 0.0f;
+		else m_time = time;
+	}
+
+	void animation_sync::play() {
+		m_playing = true;
+		m_willPauseNextFrame = false;
+	}
+
+	void animation_sync::pause() {
+		m_playing = false;
+	}
+
+
+
 	animation_sys* animation_sys::instance = nullptr;
 	animation_sys::animation_sys() {
 	}
@@ -73,6 +151,10 @@ namespace r2 {
 	}
 
 	void animation_sys::doUpdate(f32 frameDelta, f32 updateDelta) {
+		for (auto s = m_syncs.begin();s != m_syncs.end();s++) {
+			(*s)->update(updateDelta);
+		}
+		
 		auto& state = this->state();
 		state.enable();
 		state->for_each<animation_component>([updateDelta](animation_component* comp) {
@@ -88,5 +170,21 @@ namespace r2 {
 	}
 
 	void animation_sys::handle(event* evt) {
+	}
+
+	void animation_sys::add_sync(animation_sync* sync) {
+		for (auto s = instance->m_syncs.begin();s != instance->m_syncs.end();s++) {
+			if ((*s) == sync) return;
+		}
+		instance->m_syncs.push_back(sync);
+	}
+
+	void animation_sys::remove_sync(animation_sync* sync) {
+		for (auto s = instance->m_syncs.begin();s != instance->m_syncs.end();s++) {
+			if ((*s) == sync) {
+				instance->m_syncs.erase(s);
+				return;
+			}
+		}
 	}
 };

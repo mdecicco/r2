@@ -22,15 +22,24 @@ namespace r2 {
 		m_time = 0.0f;
 		m_loops = loops;
 		m_playing = false;
+		m_sync = nullptr;
 	}
 
 	animation_group::animation_group(data_container* in, scene_entity* entity) {
+		m_time = 0.0f;
+		m_playing = false;
+		m_sync = nullptr;
+
 		if (!deserialize(in, entity)) {
 			throw std::exception("Failed to deserialize exception!");
 		}
 	}
 
 	animation_group::animation_group(data_container* in, const animation_deserializer& deserialzer) {
+		m_time = 0.0f;
+		m_playing = false;
+		m_sync = nullptr;
+
 		if (!deserialize(in, deserialzer)) {
 			throw std::exception("Failed to deserialize exception!");
 		}
@@ -320,9 +329,22 @@ namespace r2 {
 		return m_contiguous_tracks[idx];
 	}
 
+	bool animation_group::playing() const {
+		return m_playing || (m_sync && m_sync->playing());
+	}
+
+	f32 animation_group::current_time() const {
+		if (m_sync) {
+			f32 st = m_sync->current_time();
+			return st > m_duration ? m_duration : st;
+		}
+		return m_time;
+	}
+
 	bool animation_group::duration(f32 duration) {
 		if (duration >= m_duration) {
 			m_duration = duration;
+			if (m_sync) m_sync->update_duration();
 			return true;
 		}
 
@@ -335,6 +357,7 @@ namespace r2 {
 		}
 
 		m_duration = duration;
+		if (m_sync) m_sync->update_duration();
 		return true;
 	}
 
@@ -343,7 +366,14 @@ namespace r2 {
 	}
 
 	void animation_group::update(f32 dt, scene_entity* target) {
-		if (!m_playing) return;
+		if ((!m_playing && !m_sync) || (m_sync && !m_sync->playing())) return;
+
+		if (m_sync) {
+			for (auto i = m_contiguous_tracks.begin();i != m_contiguous_tracks.end();i++) {
+				(*i)->update(m_sync->current_time(), target);
+			}
+			return;
+		}
 
 		m_time += dt;
 		bool reached_end = false;
@@ -358,26 +388,47 @@ namespace r2 {
 
 		if (reached_end) {
 			m_time = 0.0f;
-			if (!m_loops) m_playing = false;
+			m_playing = m_loops;
 		}
 	}
 
 	void animation_group::set_time(f32 time) {
+		if (m_sync) {
+			m_sync->set_time(time);
+			return;
+		}
+
 		if (time > m_duration) m_time = m_duration;
 		else if (time < 0.0f) m_time = 0.0f;
 		else m_time = time;
 	}
 
 	void animation_group::reset() {
+		if (m_sync) {
+			m_sync->pause();
+			m_sync->set_time(0.0f);
+			return;
+		}
+
 		m_playing = false;
 		m_time = 0.0f;
 	}
 
 	void animation_group::play() {
+		if (m_sync) {
+			m_sync->play();
+			return;
+		}
+
 		m_playing = true;
 	}
 
 	void animation_group::pause() {
+		if (m_sync) {
+			m_sync->pause();
+			return;
+		}
+
 		m_playing = false;
 	}
 };

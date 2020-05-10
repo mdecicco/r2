@@ -228,6 +228,8 @@ namespace r2 {
 			munordered_map<mstring, track_info> track_properties;
 	};
 
+	class animation_sync;
+
 	class animation_group {
 		public:
 			animation_group(const mstring& name, f32 duration, bool loops = false);
@@ -281,7 +283,7 @@ namespace r2 {
 
 			animation_track_base* track(size_t idx);
 
-			inline bool playing() const { return m_playing; }
+			bool playing() const;
 
 			inline const mstring& name() const { return m_name; }
 
@@ -289,7 +291,7 @@ namespace r2 {
 
 			inline bool loops() const { return m_loops; }
 
-			inline f32 current_time() const { return m_time; }
+			f32 current_time() const;
 
 			bool duration(f32 duration);
 
@@ -306,11 +308,13 @@ namespace r2 {
 			void pause();
 
 		protected:
+			friend class animation_sync;
 			mstring m_name;
 			f32 m_duration;
 			f32 m_time;
 			bool m_loops;
 			bool m_playing;
+			animation_sync* m_sync;
 
 			munordered_map<mstring, animation_track_base*> m_tracks;
 			mvector<animation_track_base*> m_contiguous_tracks;
