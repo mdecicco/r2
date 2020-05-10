@@ -181,6 +181,7 @@ namespace r2 {
 	}
 
 	void camera_sys::initialize() {
+		r2engine::register_entity_property<mat4f>("projection");
 	}
 
 	void camera_sys::tick(f32 dt) {

@@ -63,6 +63,7 @@ namespace r2 {
 	}
 
 	void transform_sys::initialize() {
+		r2engine::register_entity_property<mat4f>("transform");
 	}
 
 	void transform_sys::tick(f32 dt) {

@@ -109,6 +109,14 @@ namespace r2 {
 		auto fac = new lighting_system_state_factory();
 		auto stateMgr = r2engine::get()->states();
 		m_lightingState = stateMgr->register_state_data_factory<lighting_system_state>(fac);
+
+		r2engine::register_entity_property<light_type>("lighting.type");
+		r2engine::register_entity_property<vec3f>("lighting.color");
+		r2engine::register_entity_property<f32>("lighting.cone_inner_angle");
+		r2engine::register_entity_property<f32>("lighting.cone_outer_angle");
+		r2engine::register_entity_property<f32>("lighting.constant_attenuation");
+		r2engine::register_entity_property<f32>("lighting.linear_attenuation");
+		r2engine::register_entity_property<f32>("lighting.quadratic_attenuation");
 	}
 
 	void lighting_sys::tick(f32 dt) {

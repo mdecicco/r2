@@ -6,6 +6,7 @@
 #include <r2/utilities/periodic_update.h>
 #include <r2/utilities/dynamic_array.hpp>
 #include <r2/bindings/math_converters.h>
+#include <r2/systems/animation.h>
 
 namespace r2 {
 	typedef u32 entityId;
@@ -59,11 +60,29 @@ namespace r2 {
 	class lighting_component;
 	class animation_component;
 
-	namespace interpolate {
-		enum interpolation_transition_mode;
-		typedef f32 (*InterpolationFactorCallback)(f32);
-		InterpolationFactorCallback from_enum(interpolation_transition_mode mode);
+	struct animatable_property_data {
+		component_ref<scene_entity_component*> ref;
+		size_t offset;
 	};
+
+	template <typename T>
+	inline void animation_property_setter(const T& value, scene_entity* entity, void* user_data) {
+		animatable_property_data* propAccess = (animatable_property_data*)user_data;
+		scene_entity_component* comp = propAccess->ref.get();
+		if (comp) *((T*)(((u8*)comp) + propAccess->offset)) = value;
+	}
+
+	template <typename T>
+	inline animation_track_base* bind_property_to_animation(const mstring& prop, animatable_property_data* propAccess, animation_group* anim) {
+		return anim->add_track<T>(prop, *(T*)(((u8*)propAccess->ref.get()) + propAccess->offset), animation_property_setter<T>, default_interpolator<T>, propAccess);
+	}
+	
+	template <typename T>
+	inline keyframe_base* create_property_keyframe(const mstring& prop, animatable_property_data* propAccess, animation_group* anim, interpolate::interpolation_transition_mode mode) {
+		animation_track<T>* track = anim->track<T>(prop);
+		if (!track) return nullptr;
+		return track->set(*(T*)(((u8*)propAccess->ref.get()) + propAccess->offset), anim->current_time(), mode);
+	}
 
 	class scene_entity : public event_receiver, public periodic_update {
 		public:
@@ -234,13 +253,21 @@ namespace r2 {
 					return false;
 				}
 
-				(*m_propInterpolation)[prop] = prop_interpolate_info({ interpolate::itm_none, 0.0f });
-				v8::Isolate* isolate = r2engine::isolate();
-
 				componentId compId = component->id();
 				entity_system* system = component->system();
-
 				size_t offset = (char*)&((T*)nullptr->*member) - (char*)nullptr;
+				(*m_propInterpolation)[prop] = prop_interpolate_info({ interpolate::itm_none, 0.0f });
+
+				v8::Isolate* isolate = r2engine::isolate();
+
+				(*m_propAnimation)[prop] = prop_animate_info({
+					new animatable_property_data({
+						component_ref<scene_entity_component*>(system, compId),
+						offset
+					}),
+					bind_property_to_animation<U>,
+					create_property_keyframe<U>
+				});
 
 				auto get = v8pp::wrap_function(isolate, nullptr, [system, compId, offset](v8Args args) {
 					v8::Isolate* isolate = args.GetIsolate();
@@ -258,6 +285,9 @@ namespace r2 {
 					state.enable();
 					scene_entity_component* component = state->component(compId);
 					prop_interpolate_info& interp = m_propInterpolation->at(prop);
+					// Note: this is dangerous
+					// If the host component array resizes before the animation is complete
+					// then the (U*)(((u8*)component) + offset) pointer will be invalidated
 					r2engine::interpolation()->animate((U*)(((u8*)component) + offset), v8pp::convert<U>::from_v8(isolate, args[0]), interp.duration, interpolate::from_enum(interp.mode));
 					state.disable();
 					args.GetReturnValue().Set(args[0]);
@@ -299,12 +329,20 @@ namespace r2 {
 				mstring propPath = parentPropName + "." + prop;
 				(*m_propInterpolation)[propPath] = prop_interpolate_info({ interpolate::itm_none, 0.0f });
 
-				v8::Isolate* isolate = r2engine::isolate();
 
 				componentId compId = component->id();
 				entity_system* system = component->system();
-
 				size_t offset = (char*)&((T*)nullptr->*member) - (char*)nullptr;
+				(*m_propAnimation)[propPath] = prop_animate_info({
+					new animatable_property_data({
+						component_ref<scene_entity_component*>(system, compId),
+						offset
+					}),
+					bind_property_to_animation<U>,
+					create_property_keyframe<U>
+				});
+
+				v8::Isolate* isolate = r2engine::isolate();
 
 				auto get = v8pp::wrap_function(isolate, nullptr, [system, compId, offset](v8Args args) {
 					v8::Isolate* isolate = args.GetIsolate();
@@ -322,6 +360,9 @@ namespace r2 {
 					state.enable();
 					scene_entity_component* component = state->component(compId);
 					prop_interpolate_info& interp = m_propInterpolation->at(propPath);
+					// Note: this is dangerous
+					// If the host component array resizes before the animation is complete
+					// then the (U*)(((u8*)component) + offset) pointer will be invalidated
 					r2engine::interpolation()->animate((U*)(((u8*)component) + offset), v8pp::convert<U>::from_v8(isolate, args[0]), interp.duration, interpolate::from_enum(interp.mode));
 					state.disable();
 					args.GetReturnValue().Set(args[0]);
@@ -403,6 +444,9 @@ namespace r2 {
 			void add_custom_component(const mstring& systemName);
 			void remove_custom_component(const mstring& systemName);
 			void set_interpolation(const mstring& prop, interpolate::interpolation_transition_mode transition, f32 duration);
+			void animatable_props(mvector<mstring>& out) const;
+			animation_track_base* animate_prop(const mstring& prop, animation_group* animation);
+			keyframe_base* create_keyframe(const mstring& prop, animation_group* animation, interpolate::interpolation_transition_mode mode);
 			mvector<scene_entity*> children();
 			
 			template <typename F>
@@ -440,11 +484,18 @@ namespace r2 {
 				f32 duration;
 			};
 
+			struct prop_animate_info {
+				animatable_property_data* propAccess;
+				animation_track_base* (*add_to_anim)(const mstring& /*prop*/, animatable_property_data* /*propAccess*/, animation_group* /*anim*/);
+				keyframe_base* (*create_keyframe)(const mstring& /*prop*/, animatable_property_data* /*propAccess*/, animation_group* /*anim*/, interpolate::interpolation_transition_mode /*mode*/);
+			};
+
 			static entityId nextEntityId;
 			v8::Isolate* isolate;
 			PersistentValueHandle m_scriptObj;
 			munordered_map<mstring, PersistentFunctionHandle>* m_scriptFuncs;
 			munordered_map<mstring, prop_interpolate_info>* m_propInterpolation;
+			munordered_map<mstring, prop_animate_info>* m_propAnimation;
 			mlist<scene_entity*>* m_children;
 			scene_entity* m_parent;
 
@@ -559,6 +610,9 @@ namespace r2 {
 			inline componentId id() const { return m_id; }
 			inline entity_system* system() const { return m_system; }
 			inline scene_entity* entity() const { return m_entity; }
+
+			virtual bool serialize(data_container* out) { return false; }
+			virtual bool deserialize(data_container* in) { return false; }
 
 
 			/* For getting properties that are relative to the parent's same property,

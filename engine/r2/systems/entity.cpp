@@ -48,6 +48,7 @@ namespace r2 {
 		m_scriptFuncs = new munordered_map<mstring, PersistentFunctionHandle>();
 		m_children = new mlist<scene_entity*>();
 		m_propInterpolation = new munordered_map<mstring, prop_interpolate_info>();
+		m_propAnimation = new munordered_map<mstring, prop_animate_info>();
 
 		initialize_periodic_update();
 		initialize_event_receiver();
@@ -63,12 +64,13 @@ namespace r2 {
 		m_scriptFuncs = new munordered_map<mstring, PersistentFunctionHandle>();
 		m_children = new mlist<scene_entity*>();
 		m_propInterpolation = new munordered_map<mstring, prop_interpolate_info>();
+		m_propAnimation = new munordered_map<mstring, prop_animate_info>();
 
 		initialize_periodic_update();
 		initialize_event_receiver();
 		r2engine::entity_created(this);
 		
-		m_scripted = true;//false;
+		m_scripted = true;
 		m_doesUpdate = false;
 
 		isolate = r2engine::isolate();
@@ -86,6 +88,15 @@ namespace r2 {
 		}
 		delete m_children;
 		m_children = nullptr;
+
+		for (auto it = m_propAnimation->begin();it != m_propAnimation->end();it++) {
+			delete it->second.propAccess;
+		}
+
+		delete m_propInterpolation;
+		m_propInterpolation = nullptr;
+		delete m_propAnimation;
+		m_propAnimation = nullptr;
 	}
 
 	Local<Object> scene_entity::script_obj() const {
@@ -221,6 +232,15 @@ namespace r2 {
 		bool deleted = obj->Delete(ctx, key).FromJust();
 		if (!deleted) {
 			r2Error("Failed to delete property \"%s\" on entity \"%s\"", functionOrProp.c_str(), m_name->c_str());
+		} else {
+			auto pi_it = m_propInterpolation->find(functionOrProp);
+			if (pi_it != m_propInterpolation->end()) m_propInterpolation->erase(pi_it);
+			
+			auto pa_it = m_propAnimation->find(functionOrProp);
+			if (pa_it != m_propAnimation->end()) {
+				delete pa_it->second.propAccess;
+				m_propAnimation->erase(pa_it);
+			}
 		}
 	}
 
@@ -423,6 +443,34 @@ namespace r2 {
 		} else {
 			r2Error("Entity '%s' has no interpolatable property '%s'", m_name->c_str(), prop.c_str());
 		}
+	}
+
+	void scene_entity::animatable_props(mvector<mstring>& out) const {
+		for (auto it = m_propAnimation->begin();it != m_propAnimation->end();it++) {
+			out.push_back(it->first);
+		}
+	}
+
+	animation_track_base* scene_entity::animate_prop(const mstring& prop, animation_group* animation) {
+		auto it = m_propAnimation->find(prop);
+		if (it == m_propAnimation->end()) {
+			r2Error("Entity '%s' has no animatable property named '%s'", m_name->c_str(), prop.c_str());
+			return nullptr;
+		}
+
+		auto& pai = it->second;
+		return pai.add_to_anim(prop, pai.propAccess, animation);
+	}
+
+	keyframe_base* scene_entity::create_keyframe(const mstring& prop, animation_group* animation, interpolate::interpolation_transition_mode mode) {
+		auto it = m_propAnimation->find(prop);
+		if (it == m_propAnimation->end()) {
+			r2Error("Entity '%s' has no animatable property named '%s'", m_name->c_str(), prop.c_str());
+			return nullptr;
+		}
+
+		auto& pai = it->second;
+		return pai.create_keyframe(prop, pai.propAccess, animation, mode);
 	}
 
 	mvector<scene_entity*> scene_entity::children() {

@@ -183,6 +183,14 @@ namespace r2 {
 		instance->m_entities.disable();
 		return e;
 	}
+	void r2engine::entities(mvector<scene_entity*>& out) {
+		instance->m_entities.enable();
+		instance->m_entities->entities.for_each([&out](scene_entity** entity) {
+			out.push_back(*entity);
+			return true;
+		});
+		instance->m_entities.disable();
+	}
 
 	scripted_sys* r2engine::scripted_system(const mstring& systemName) {
 		for (scripted_sys* sys : instance->scripted_systems) {
@@ -273,12 +281,32 @@ namespace r2 {
 		glfwTerminate();
     }
 
-    void r2engine::log(const mstring& pre,mstring msg,...) {
+    void r2engine::log(const mstring& pre, mstring msg,...) {
         va_list l;
         va_start(l,msg);
         logMgr->log(pre,msg,l);
         va_end(l);
     }
+
+	bool r2engine::serialize_entity_property(const mstring& propertyName, void* inData, data_container* out) {
+		auto it = instance->m_entityProperties.find(propertyName);
+		if (it == instance->m_entityProperties.end()) {
+			r2Error("'%s' is not a registered entity property", propertyName.c_str());
+			return false;
+		}
+
+		return it->second.serialize_func(inData, out);
+	}
+
+	bool r2engine::deserialize_entity_property(const mstring& propertyName, void* outData, data_container* in) {
+		auto it = instance->m_entityProperties.find(propertyName);
+		if (it == instance->m_entityProperties.end()) {
+			r2Error("'%s' is not a registered entity property", propertyName.c_str());
+			return false;
+		}
+
+		return it->second.deserialize_func(outData, in);
+	}
 
 	bool r2engine::open_window(i32 w, i32 h, const mstring& title, bool can_resize, bool fullscreen) {
 		if(!m_window.create(w, h, title, can_resize, 4, 5, fullscreen)) {

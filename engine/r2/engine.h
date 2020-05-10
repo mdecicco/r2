@@ -44,6 +44,15 @@ namespace r2 {
 			virtual engine_state_data* create();
 	};
 
+	template <typename T>
+	bool default_serializer(void* inData, data_container* out) {
+		return out->write_data(inData, sizeof(T));
+	}
+	template <typename T>
+	bool default_deserializer(void* outData, data_container* in) {
+		return in->read_data(outData, sizeof(T));
+	}
+
     class r2engine : public event_receiver {
         public:
 			static void register_system(entity_system* system);
@@ -69,13 +78,39 @@ namespace r2 {
 			static interpolation_man* interpolation();
 			static scripted_sys* scripted_system(const mstring& systemName);
 			static marl::Scheduler* scheduler();
-
 			static r2::window* window();
 			static engine_state_data* get_engine_state_data(u16 factoryIdx);
 			static scene* current_scene();
 			static inline f32 fps() { return instance->m_fps; }
 			static bool started() { return instance->m_loopDidStart; }
-			static scene_entity* entity(entityId);
+			static scene_entity* entity(entityId id);
+			static void entities(mvector<scene_entity*>& out);
+
+			// data
+			typedef bool (*entity_prop_serialize_func)(void* /*inData*/, data_container* /*out*/);
+			typedef bool (*entity_prop_deserialize_func)(void* /*outData*/, data_container* /*in*/);
+			
+			template <typename T>
+			static void register_entity_property(
+				const mstring& propertyName,
+				entity_prop_serialize_func serialize = default_serializer<T>,
+				entity_prop_deserialize_func deserialize = default_deserializer<T>
+			) {
+				auto it = instance->m_entityProperties.find(propertyName);
+				if (it != instance->m_entityProperties.end()) {
+					r2Error("Entity property '%s' has already been registered", propertyName.c_str());
+					return;
+				}
+
+				instance->m_entityProperties[propertyName] = {
+					propertyName,
+					mstring(typeid(T).name()),
+					serialize,
+					deserialize
+				};
+			}
+			static bool serialize_entity_property(const mstring& propertyName, void* inData, data_container* out);
+			static bool deserialize_entity_property(const mstring& propertyName, void* outData, data_container* in);
 
 			// description not found
 			bool open_window(i32 w, i32 h, const mstring& title, bool can_resize = false, bool fullscreen = false);
@@ -116,6 +151,15 @@ namespace r2 {
 			input_man* m_inputMgr;
 			audio_man* m_audioMgr;
 			interpolation_man* m_interpMgr;
+
+			// data
+			struct entity_property_info {
+				mstring propertyName;
+				mstring propertyTypeName;
+				entity_prop_serialize_func serialize_func;
+				entity_prop_deserialize_func deserialize_func;
+			};
+			munordered_map<mstring, entity_property_info> m_entityProperties;
 
 			// stuff
 			r2::window m_window;
