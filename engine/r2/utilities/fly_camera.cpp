@@ -19,7 +19,13 @@ namespace r2 {
 		}
 
 		vec2f screen = r2engine::get()->window()->get_size();
-		camera->projection = glm::perspective(glm::radians(90.0f), screen.x / screen.y, 0.1f, 200.0f);
+		camera->field_of_view = 90.0f;
+		camera->width = screen.x;
+		camera->height = screen.y;
+		camera->near_plane = 0.1f;
+		camera->far_plane = 200.0f;
+		camera->orthographic_factor = 0.0f;
+		camera->update_projection();
 
 		moveSpeed = 25.0f;
 	}
@@ -29,7 +35,9 @@ namespace r2 {
 
 		time += updateDt;
 		vec2f screen = r2engine::get()->window()->get_size();
-		camera->projection = glm::perspective(glm::radians(90.0f), screen.x / screen.y, 0.1f, 1000.0f);
+		camera->width = screen.x;
+		camera->height = screen.y;
+		camera->update_projection();
 
 		if (r2engine::input()->joystick_count() > 0) {
 			auto js = r2engine::input()->joystick(0);
@@ -63,7 +71,7 @@ namespace r2 {
 
 			if (changed) {
 				transform->transform = glm::translate(j_rot, j_pos);
-				camera->update_frustum();
+				camera->update_projection();
 			}
 		}
 	}

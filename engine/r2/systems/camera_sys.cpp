@@ -9,59 +9,59 @@ namespace r2 {
 	camera_frustum::~camera_frustum() {
 	}
 
-	void camera_frustum::set(const mat4f& mvp) {
+	void camera_frustum::set(const mat4f& vp) {
 		planes[pi_right] = {
 			vec3f(
-				mvp[0][3] + mvp[0][0],
-				mvp[1][3] + mvp[1][0],
-				mvp[2][3] + mvp[2][0]
+				vp[0][3] + vp[0][0],
+				vp[1][3] + vp[1][0],
+				vp[2][3] + vp[2][0]
 			),
-			mvp[3][3] + mvp[3][0]
+			vp[3][3] + vp[3][0]
 		};
 
 		planes[pi_left] = {
 			vec3f(
-				mvp[0][3] - mvp[0][0],
-				mvp[1][3] - mvp[1][0],
-				mvp[2][3] - mvp[2][0]
+				vp[0][3] - vp[0][0],
+				vp[1][3] - vp[1][0],
+				vp[2][3] - vp[2][0]
 			),
-			mvp[3][3] - mvp[3][0]
+			vp[3][3] - vp[3][0]
 		};
 
 		planes[pi_bottom] = {
 			vec3f(
-				mvp[0][3] + mvp[0][1],
-				mvp[1][3] + mvp[1][1],
-				mvp[2][3] + mvp[2][1]
+				vp[0][3] + vp[0][1],
+				vp[1][3] + vp[1][1],
+				vp[2][3] + vp[2][1]
 			),
-			mvp[3][3] + mvp[3][1]
+			vp[3][3] + vp[3][1]
 		};
 
 		planes[pi_top] = {
 			vec3f(
-				mvp[0][3] - mvp[0][1],
-				mvp[1][3] - mvp[1][1],
-				mvp[2][3] - mvp[2][1]
+				vp[0][3] - vp[0][1],
+				vp[1][3] - vp[1][1],
+				vp[2][3] - vp[2][1]
 			),
-			mvp[3][3] - mvp[3][1]
+			vp[3][3] - vp[3][1]
 		};
 
 		planes[pi_far] = {
 			vec3f(
-				mvp[0][2],
-				mvp[1][2],
-				mvp[2][2]
+				vp[0][2],
+				vp[1][2],
+				vp[2][2]
 			),
-			mvp[3][2]
+			vp[3][2]
 		};
 
 		planes[pi_near] = {
 			vec3f(
-				mvp[0][3] - mvp[0][2],
-				mvp[1][3] - mvp[1][2],
-				mvp[2][3] - mvp[2][2]
+				vp[0][3] - vp[0][2],
+				vp[1][3] - vp[1][2],
+				vp[2][3] - vp[2][2]
 			),
-			mvp[3][3] - mvp[3][2]
+			vp[3][3] - vp[3][2]
 		};
 
 		auto normalize = [](frustum_plane& p) {
@@ -90,7 +90,16 @@ namespace r2 {
 
 
 
-	camera_component::camera_component() : projection(mat4f(1.0f)), active(false) {
+	camera_component::camera_component() {
+		m_projection = mat4f(1.0f);
+		m_active = false;
+		field_of_view = 60.0f;
+		vec2f ws = r2engine::get()->window()->get_size();
+		width = ws.x;
+		height = ws.y;
+		near_plane = 0.01f;
+		far_plane = 1000.0f;
+		orthographic_factor = 0.0f;
 	}
 
 	camera_component::~camera_component() {
@@ -100,11 +109,37 @@ namespace r2 {
 		((camera_sys*)system())->activate_camera(entity());
 	}
 
+	void camera_component::update_projection() {
+		if (orthographic_factor == 0.0f) {
+			// completely perspective
+			m_projection = glm::perspective(glm::radians(field_of_view), width / height, near_plane, far_plane);
+		} else if (orthographic_factor == 1.0f) {
+			// completely orthographic
+			f32 hw = width * 0.5f;
+			f32 hh = height * 0.5f;
+			m_projection = glm::ortho(-hw, hw, hh, hh, near_plane, far_plane);
+		}
+		f32 w = width;
+		if (w == 0.0f) w = 0.0001f;
+		f32 h = height;
+		if (h == 0.0f) h = 0.0001f;
+		mat4f persp = glm::perspective(glm::radians(field_of_view), w / h, near_plane, far_plane);
+		f32 hw = w * 0.5f;
+		f32 hh = h * 0.5f;
+		mat4f ortho = glm::ortho(-hw, hw, -hh, hh, near_plane, far_plane);
+		m_projection = persp + ((ortho - persp) * glm::clamp(orthographic_factor, 0.0f, 1.0f));
+
+		scene_entity* e = entity();
+		mat4f view = mat4f(1.0f);
+		if (e->transform) view = e->transform->cascaded_property(&transform_component::transform, &cascade_mat4f);
+		m_frustum.set(m_projection * view);
+	}
+
 	void camera_component::update_frustum() {
 		scene_entity* e = entity();
 		mat4f view = mat4f(1.0f);
 		if (e->transform) view = e->transform->cascaded_property(&transform_component::transform, &cascade_mat4f);
-		frustum.set(projection * view);
+		m_frustum.set(m_projection * view);
 	}
 
 
@@ -129,7 +164,7 @@ namespace r2 {
 		s.enable();
 		if (!s->contains_entity(entity->id())) {
 			entity->unbind("add_camera_component");
-		} else entity->unbind("remove_camera_component");
+		} else entity->unbind("camera");
 		s.disable();
 	}
 
@@ -146,15 +181,27 @@ namespace r2 {
 		if (entity->is_scripted()) {
 			entity->unbind("add_camera_component");
 
-			entity->bind_interpolatable(component, "projection", &c::projection);
-			entity->bind(component, "active", &c::active, true);
-			entity->bind(this, "update_frustum", [](entity_system* sys, scene_entity* entity, v8Args args) {
-				entity->camera->update_frustum();
+			entity->bind_interpolatable(component, "camera", "orthographic_factor", &c::orthographic_factor);
+			entity->bind_interpolatable(component, "camera", "field_of_view", &c::field_of_view);
+			entity->bind_interpolatable(component, "camera", "width", &c::width);
+			entity->bind_interpolatable(component, "camera", "height", &c::height);
+			entity->bind_interpolatable(component, "camera", "near_plane", &c::near_plane);
+			entity->bind_interpolatable(component, "camera", "far_plane", &c::far_plane);
+			entity->bind(component, "camera", "projection", &c::m_projection, true);
+
+			entity->bind(this, "camera", "is_active", [](entity_system* sys, scene_entity* entity, v8Args args) {
+				args.GetReturnValue().Set(v8::Boolean::New(args.GetIsolate(), entity->camera->is_active()));
 			});
-			entity->bind(this, "activate", [](entity_system* sys, scene_entity* entity, v8Args args) {
+			entity->bind(this, "camera", "is_orthographic", [](entity_system* sys, scene_entity* entity, v8Args args) {
+				args.GetReturnValue().Set(v8::Boolean::New(args.GetIsolate(), entity->camera->is_orthographic()));
+			});
+			entity->bind(this, "camera", "update_projection", [](entity_system* sys, scene_entity* entity, v8Args args) {
+				entity->camera->update_projection();
+			});
+			entity->bind(this, "camera", "activate", [](entity_system* sys, scene_entity* entity, v8Args args) {
 				((camera_sys*)sys)->activate_camera(entity);
 			});
-			entity->bind(this, "remove_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
+			entity->bind(this, "camera", "remove", [](entity_system* system, scene_entity* entity, v8Args args) {
 				system->removeComponentFrom(entity);
 			});
 		}
@@ -164,8 +211,6 @@ namespace r2 {
 	void camera_sys::unbind(scene_entity* entity) {
 		if (entity->is_scripted()) {
 			entity->unbind("camera");
-			entity->unbind("update_frustum");
-			entity->unbind("activate");
 			entity->bind(this, "add_camera_component", [](entity_system* system, scene_entity* entity, v8Args args) {
 				system->addComponentTo(entity);
 			});
@@ -181,7 +226,12 @@ namespace r2 {
 	}
 
 	void camera_sys::initialize() {
-		r2engine::register_entity_property<mat4f>("projection");
+		r2engine::register_entity_property<f32>("camera.orthographic_factor");
+		r2engine::register_entity_property<f32>("camera.field_of_view");
+		r2engine::register_entity_property<f32>("camera.width");
+		r2engine::register_entity_property<f32>("camera.height");
+		r2engine::register_entity_property<f32>("camera.near_plane");
+		r2engine::register_entity_property<f32>("camera.far_plane");
 	}
 
 	void camera_sys::tick(f32 dt) {
@@ -207,24 +257,24 @@ namespace r2 {
 		camera_component* cam = entity->camera.get();
 
 		// do nothing if the camera is already active
-		if (cam->active) {
+		if (cam->m_active) {
 			state.disable();
 			return;
 		}
 
 		// set the active camera to inactive, if there is one
 		state->for_each<camera_component>([](camera_component* c) {
-			bool should_break = c->active;
+			bool should_break = c->m_active;
 
 			// deactivate
-			c->active = false;
+			c->m_active = false;
 
 			// break if the active camera is found
 			return !should_break;
 		});
 
 		// activate this one
-		cam->active = true;
+		cam->m_active = true;
 		curScene->camera = entity;
 		state.disable();
 	}

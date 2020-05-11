@@ -612,7 +612,8 @@ namespace r2 {
 		// TODO: Optimize
 
 		if (camera && camera->camera) {
-			mat4f proj = camera->camera->projection;
+			camera->camera->update_projection();
+			mat4f proj = camera->camera->projection();
 			mat4f view = mat4f(1.0f);
 			if (camera->transform) {
 				view = camera->transform->cascaded_property(&transform_component::transform, &cascade_mat4f);

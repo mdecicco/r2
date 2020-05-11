@@ -21,7 +21,7 @@ namespace r2 {
 			camera_frustum();
 			~camera_frustum();
 
-			void set(const mat4f& mvp);
+			void set(const mat4f& vp);
 			bool contains(const vec3f& point, f32 radius = -0.0f) const;
 
 			frustum_plane planes[6];
@@ -33,16 +33,25 @@ namespace r2 {
 			~camera_component();
 
 			void activate();
-			inline bool is_active() const { return active; }
+			inline bool is_active() const { return m_active; }
+			inline bool is_orthographic() const { return orthographic_factor == 1.0f; }
+			inline const mat4f& projection() const { return m_projection; }
+			inline const camera_frustum& frustum() const { return m_frustum; }
+			void update_projection();
 			void update_frustum();
 
-			mat4f projection;
-			camera_frustum frustum;
+			f32 orthographic_factor;
+			f32 field_of_view;
+			f32 width;
+			f32 height;
+			f32 near_plane;
+			f32 far_plane;
 
 		protected:
 			friend class camera_sys;
-			bool active;
-
+			bool m_active;
+			mat4f m_projection;
+			camera_frustum m_frustum;
 	};
 
 	class camera_sys : public entity_system {

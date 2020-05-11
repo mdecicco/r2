@@ -23,6 +23,8 @@ namespace r2 {
             itm_easeInOutQuint
         };
 
+        // no interpolation
+        f32 none (f32 normalizedInput);
         // no easing, no acceleration
         f32 linear (f32 normalizedInput);
         // accelerating from zero velocity

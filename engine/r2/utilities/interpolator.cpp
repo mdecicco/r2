@@ -2,6 +2,8 @@
 
 namespace r2 {
     namespace interpolate {
+        // no interpolation
+        f32 none (f32 t) { return t < 1.0f ? 0.0f : 1.0f; }
         // no easing, no acceleration
         f32 linear (f32 t) { return t; }
         // accelerating from zero velocity
@@ -31,7 +33,7 @@ namespace r2 {
 
         InterpolationFactorCallback from_enum(interpolation_transition_mode mode) {
             static InterpolationFactorCallback funcs[] = {
-                nullptr,
+                none,
                 linear,
                 easeInQuad,
                 easeOutQuad,
