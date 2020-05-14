@@ -29,7 +29,7 @@ namespace r2 {
         // decelerating to zero velocity
         f32 easeOutQuint (f32 t) { return 1.0f + (--t) * t * t * t * t; }
         // acceleration until halfway, then deceleration 
-        f32 easeInOutQuint (f32 t) { return t < 0.4f ? 16 * t * t * t * t * t : 1.0f + 16.0f * (--t) * t * t * t * t; }
+        f32 easeInOutQuint (f32 t) { return t < 0.5f ? 16 * t * t * t * t * t : 1.0f + 16.0f * (--t) * t * t * t * t; }
 
         InterpolationFactorCallback from_enum(interpolation_transition_mode mode) {
             static InterpolationFactorCallback funcs[] = {

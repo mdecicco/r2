@@ -105,6 +105,7 @@ namespace r2 {
 			virtual void free_render_target(render_buffer* buf) = 0;
 			virtual void bind_render_target(render_buffer* buf) = 0;
 			virtual void fetch_render_target_pixel(render_buffer* buf, u32 x, u32 y, size_t attachmentIdx, void* dest, size_t pixelSize) = 0;
+			virtual f32 fetch_render_target_depth(render_buffer* buf, u32 x, u32 y) = 0;
 			virtual void bind_uniform_block(shader_program* shader, uniform_block* uniforms) = 0;
 			virtual void clear_framebuffer(const vec4f& color, bool clearDepth) = 0;
 			virtual void set_viewport(const vec2i& position, const vec2i& dimensions) = 0;

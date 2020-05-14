@@ -481,7 +481,7 @@ namespace r2 {
 			return;
 		}
 
-		if (buf->depth_mode_changed()) {
+		if (buf->depth_mode_changed() || buf->has_size_updates()) {
 			pair<GLuint, GLuint>& fb = m_targets[buf->id()];
 			glCall(glBindFramebuffer(GL_FRAMEBUFFER, fb.first));
 
@@ -498,6 +498,9 @@ namespace r2 {
 
 			glCall(glBindRenderbuffer(GL_RENDERBUFFER, 0));
 			glCall(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+
+			buf->clear_mode_updates();
+			buf->clear_size_updates();
 		}
 	}
 
@@ -549,6 +552,20 @@ namespace r2 {
 		glCall(glReadPixels(x, tex->height() - y, 1, 1, clientFmt, type, dest));
 
 		bind_render_target(currentTarget);
+	}
+	f32 gl_render_driver::fetch_render_target_depth(render_buffer* buf, u32 x, u32 y) {
+		if (buf->attachment_count() == 0) return 0.0f;
+
+		texture_buffer* tex = buf->attachment(0);
+		render_buffer* currentTarget = m_target;
+		bind_render_target(buf);
+
+		f32 depth = 0.0f;
+		glCall(glReadPixels(x, tex->height() - y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth));
+
+		bind_render_target(currentTarget);
+
+		return depth;
 	}
 
 	GLuint gl_render_driver::get_texture_id(texture_buffer* buf) {

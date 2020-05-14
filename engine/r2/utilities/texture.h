@@ -111,14 +111,18 @@ namespace r2 {
 			inline render_buffer_depth_mode depth_mode() const { return m_depth; }
 			inline bool depth_mode_changed() const { return m_depthModeChanged; }
 			inline bool has_mode_updates() const { return m_depthModeChanged; }
+			inline bool has_size_updates() const { return m_resized; }
 			vec2i dimensions();
 			void clear_mode_updates();
+			void clear_size_updates();
 			void raise_synced_flag();
 
 			void attach(texture_buffer* texture);
 			void set_depth_mode(render_buffer_depth_mode mode);
+			void resize(const vec2i& size);
 
 			void fetch_pixel(u32 x, u32 y, size_t attachmentIdx, void* dest, size_t pixelSize);
+			f32 fetch_depth(u32 x, u32 y);
 
 			template <typename P>
 			P pixel(u32 x, u32 y, size_t attachmentIdx) {
@@ -134,6 +138,7 @@ namespace r2 {
 
 			bool m_wasSynced;
 			bool m_depthModeChanged;
+			bool m_resized;
 			render_buffer_depth_mode m_depth;
 			dynamic_pod_array<texture_buffer*> m_attachments;
 	};

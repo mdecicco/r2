@@ -99,6 +99,7 @@ namespace r2 {
 			virtual void free_render_target(render_buffer* buf);
 			virtual void bind_render_target(render_buffer* buf);
 			virtual void fetch_render_target_pixel(render_buffer* buf, u32 x, u32 y, size_t attachmentIdx, void* dest, size_t pixelSize);
+			virtual f32 fetch_render_target_depth(render_buffer* buf, u32 x, u32 y);
 			GLuint get_texture_id(texture_buffer* buf);
 			virtual void bind_uniform_block(shader_program* shader, uniform_block* uniforms);
 			virtual void clear_framebuffer(const vec4f& color, bool clearDepth);

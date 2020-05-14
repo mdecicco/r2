@@ -90,7 +90,7 @@ namespace r2 {
 
 
 
-	render_buffer::render_buffer() : gpu_buffer(0), m_depth(rbdm_no_depth), m_depthModeChanged(true), m_wasSynced(false) { }
+	render_buffer::render_buffer() : gpu_buffer(0), m_depth(rbdm_no_depth), m_depthModeChanged(true), m_wasSynced(false), m_resized(false) { }
 	
 	render_buffer::~render_buffer() { }
 
@@ -102,6 +102,10 @@ namespace r2 {
 
 	void render_buffer::clear_mode_updates() {
 		m_depthModeChanged = false;
+	}
+
+	void render_buffer::clear_size_updates() {
+		m_resized = false;
 	}
 
 	void render_buffer::raise_synced_flag() {
@@ -120,8 +124,20 @@ namespace r2 {
 		m_depth = mode;
 		m_depthModeChanged = true;
 	}
+	void render_buffer::resize(const vec2i& size) {
+		for (u32 a = 0;a < m_attachments.size();a++) {
+			texture_buffer* attachment = *m_attachments[a];
+			attachment->create(size.x, size.y, attachment->channels(), attachment->type(), true);
+		}
+
+		m_resized = true;
+	}
 
 	void render_buffer::fetch_pixel(u32 x, u32 y, size_t attachmentIdx, void* dest, size_t pixelSize) {
 		r2engine::renderer()->driver()->fetch_render_target_pixel(this, x, y, attachmentIdx, dest, pixelSize);
+	}
+
+	f32 render_buffer::fetch_depth(u32 x, u32 y) {
+		return r2engine::renderer()->driver()->fetch_render_target_depth(this, x, y);
 	}
 };
